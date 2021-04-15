@@ -1,0 +1,37 @@
+---
+title: "STAT-462: Lab 8"
+author: "Candace Todd"
+date: "`r Sys.Date()`"
+output:
+  rmdformats::robobook:
+    self_contained: true
+    thumbnails: false
+    lightbox: true
+    gallery: false
+    toc_depth: 5
+    highlight: pygments
+---
+  
+# Markdown
+  
+```{r, message=FALSE, warning=FALSE}
+# Clear Workspace
+rm(list = ls())
+
+# Load Libraries
+library(ggplot2)
+```
+  
+# 1
+
+Schools do not receive a Quality Review every year. 
+https://data.cityofnewyork.us/Education/LCGMS-DOE-School-Information-Report/3bkj-34v2
+
+absenteeism 
+https://infohub.nyced.org/reports/school-quality/information-and-data-overview/end-of-year-attendance-and-chronic-absenteeism-data
+
+```{r}
+green <- read.xlsx("C:/Users/Candace/Downloads/public-school-attendance-results-2014-2019.xlsx",sheet=2)
+
+```
+

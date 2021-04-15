@@ -1,0 +1,577 @@
+---
+title: "STAT-462: Lab 5"
+author: "Candace Todd"
+date: "March 11, 2021"
+output:
+  rmdformats::readthedown:
+    highlight: kate
+  html_document:
+    number_sections: yes
+    df_print: paged
+  html_notebook:
+    number_sections: yes
+---
+
+# Markdown 
+  
+```{r setup, include=FALSE}
+library(knitr)
+library(rmdformats)
+```
+
+
+```{r message=FALSE, warning=FALSE}
+# Clear Workspace
+rm(list=ls())
+
+# Load libraries
+library(tidyverse)
+library(dplyr)
+library(ggpubr)
+library(Stat2Data)
+library(corrplot)
+library(olsrr)
+library(sf)    
+library(tmap)  
+library(plotly)
+library(skimr)
+library(gridExtra)
+library(ggExtra)
+library(GGally)
+```
+   
+
+# Q1  
+  
+## Context
+  
+`PlantAdvertising.csv`, which we read in as the `Plants` data set, contains data on 200 of our company's houseplant marketing campaigns from the last few years. Each row is one campaign. There are 200 rows and 6 variables in `Plants`. From the information given, I assume that the observational units are one particular campaign for one particular type of plant that ran at some point in the "last few years". The goal of examining `Plants` is to gain insight on whether the amount of money we spend on different advertising media is a linear predictor of the houseplant sales for a campaign.
+  
+Something that it may be important to note is the extent of this data set. We aren't told exactly how the data was collected, but from the background provided it sounds like this data set somehow contains information for *all campaigns* the company has run in the past few years. I'm concluding this from the fact that the company has run exactly 200 campaigns and our data set contains information on 200 campaigns:
+  
+  > *"You have run 200 marketing campaigns over the last few years. For each one, you recorded..."*
+  
+```{r}
+Plants <- read.csv("PlantAdvertising.csv") # Read in data
+nrow(Plants) # Display number of rows
+```
+
+If our goal is to gain insight on how our recent campaigns performed then the `Plants` data set might actually be the entire population of interest, in which case inference about the population is unnecessary because we have direct access to it. For the purposes of completing the lab, and considering the possibility of my misinterpretation of the data's background, we continue from here treating our data set as a representative *sample* of our population.
+  
+For each campaign we have numerical data on how much money was spent in thousands of US dollars on TV, radio, and newspaper advertisements, contained under the `TV`, `Radio`, and `Newspaper` columns respectively, how many houseplants were sold in thousands of plants, `Sales`, the percentage popularity of the houseplant at that time, `Plant_Popularity` (I'm unsure exactly how popularity was measured), and the typical height of the houseplant in inches, `Plant_Height_in`. Below is an output showing the distribution and summary statistics of each variable. `TV` and `Radio` appear to have approximately uniform distributions. `Newspaper` and `Sales` seem positively skewed.   
+
+```{r}
+# Some of the column headers weren't read in correctly
+names(Plants)
+# We'll fix them here
+names(Plants)[1] <- "Plant_Popularity"
+names(Plants)[5] <- "Newspaper"
+
+# Show a summary of the data
+skim(Plants)
+```
+
+
+I imagine that different types of plants have different prices, so the price of a certain type of plant could be a confounding variable impacting sales. It's unclear whether these campaigns took place during overlapping intervals of time. If so, there might be a possibility that the sales in the campaigns are not independent of each other, perhaps one campaign's sales went down because the company's customers were more attracted to the houseplant advertised in another simultaneous campaign. We'll keep this in mind as we continue our analysis.
+  
+## EDA
+  
+```{r}
+# Another brief look at the Data
+head(Plants)
+summary(Plants)
+
+```
+
+We are particularly interested in comparing `Newspaper` as a linear predictor of `Sales` to `TV` as linear predictor of `Sales`, each in their own model (not multiple linear regression). Let's examine the relationship between the respective predictors and `Sales` through plots.  
+  
+Consider the plots below. Each point in the scatterplots represents information about one row, one advertising campaign. The axes of the histograms correspond exactly to the axes of the scatterplots as labeled.
+  
+```{r, warning=FALSE}
+## Plotting data
+
+# Create Sales vs News Scatterplot
+p.news <- 
+  ggplot(Plants, aes(x=Newspaper, y=Sales)) + 
+  geom_point(color="darkred", alpha=0.6, size=2)  + 
+  xlab("Newspaper Ad Spending (thousands of USD)") + 
+  ylab("Thousands of Sales") 
+
+# Some additional formatting of Sales vs News
+p.news.hist <- p.news  +
+  geom_point(data=Plants[Plants$Newspaper>90,], aes(x=Newspaper), color="blue", alpha=1,size=3)+
+  geom_vline(xintercept=mean(Plants$Newspaper), linetype="dashed") + # Plot mean newspaper ad spending
+  geom_hline(yintercept=mean(Plants$Sales), linetype="dashed") # Plot mean plant sales
+  
+# Put histograms of News in scatterplot Margins
+p.news.hist <- ggMarginal(p.news.hist, type="histogram", fill="darkred",  margins = "x") 
+
+# Create Sales vs TV scatterplot 
+p.tv <- 
+  ggplot(Plants, aes(x=TV, y=Sales)) + 
+  geom_point(color="darkred", alpha=0.6, size=2) + 
+  xlab("TV Ad Spending (thousands of USD)") + 
+  theme(axis.title.y=element_blank(), axis.ticks.y=element_blank(), axis.text.y=element_blank())
+
+# Some additional formatting of Sales vs TV
+p.tv.hist <- p.tv +
+  geom_point(data=Plants[Plants$Sales<4,], aes(x=TV), color="orange", alpha=1, size=3) +
+  geom_vline(xintercept=mean(Plants$TV), linetype="dashed") + # Plot mean TV ad spending
+  geom_hline(yintercept=mean(Plants$Sales), linetype="dashed") # Plot mean plant sales
+
+# Put histograms of TV and Sales in scatterplot Margins 
+p.tv.hist <- ggMarginal(p.tv.hist, type="histogram", fill="darkred") 
+
+# Arrange plots in a 1 by 2 matrix
+grid.arrange(p.news.hist, p.tv.hist, ncol=2)
+```
+  
+`Sales` is slightly positively skewed with a mean of ~14,022 plants and a standard deviation of 5,220 plants.
+  
+`Newspaper` ad spending is positively skewed with a mean of \$30,554 and a standard deviation of \$21,800.  The `Sales` vs `Newspaper` scatterplot actually appears quite random. If there truly is a relationship between the amount of money spent on newspaper advertisements and the houseplant sales for a campaign, it seems weak. There may be a weak, positive, linear relationship present. There are potentially 2 outliers in the `Newspaper` distribution, the campaigns that spent \$114,000 and \$100,900 on newspaper advertisements (blue points), but they don't seem extreme. We'll investigate them further when checking our assumptions for modeling. 
+
+`TV` ad spending seems roughly uniformly distributed with a mean of \$147,42.50 and a standard deviation of \$85,900. There appears to be a strong positive relationship between TV ad spending and number of sales for a campaign. The data appears to follow perhaps a logarithmic or root function trend, but not a simple linear trend. There is much more variance in  number of sales for higher amounts of TV ad spending. There are also potentially 2 outliers in the `TV` distribution, the campaigns that spent \$700 and \$4,100 on TV advertisements (orange points), but again they don't seem extreme. We'll investigate the outliers further, as well as the non-linearity and heteroscedasticity of the data, when checking our assumptions for modeling.
+
+```{r eval=FALSE, include=FALSE}
+# Some plots I initially wanted to make but decided against
+
+hist(Plants$Newspaper, main="Newspaper", xlab="$ Spent on Newspaper Ads (Thousands)")
+hist(Plants$TV, main="TV", xlab="$ Spent on TV Ads (Thousands)")
+plot(Plants$Newspaper, Plants$Sales, xlab = "$ Spent on Newspaper Ads (Thousands)", ylab = "Plants Sold (Thousands)")
+plot(Plants$TV, Plants$Sales, xlab = "$ Spent on TV Ads (Thousands)", ylab = "Plants Sold (Thousands)")
+
+psych::pairs.panels(Plants, 
+             method = "pearson", # correlation method
+             hist.col = "#9F2042",
+             smooth = FALSE, # Turn off trend line
+             density = FALSE,  # Turn off density plots
+             ellipses = FALSE # Turn off correlation ellipses
+             )
+```
+    
+# Q2  
+
+## Model 1: Newspaper Ad Spending as a Sales Predictor
+
+First we look at the amount of money a campaign spends on newspaper advertising, `Newspaper`, as a linear predictor of the amount of houseplant sales for a campaign, `Sales`. The model creation and summary output is shown below.
+
+```{r}
+# Create SLR model with newspaper ad spending predicting plant sales
+Model1 <- ols_regress(data=Plants, object=Sales~Newspaper)
+Model1 # Display model summary
+```
+  
+The linear model above gives us the following equation:  
+  
+\[ \frac{\widehat{\text{Sales}}}{1,000}= 12.351 + (0.055) \times \left(\frac{\text{Newspaper Spending}}{1,000} \right)\]
+  
+  or
+  
+\[ \widehat{\text{Sales}}= 12,351 + (0.055) \times \left(\text{Newspaper Spending} \right)\]
+  
+  
+Where "Sales" is the number of plants sold during a campaign and "Newspaper Spending" is the amount of USD spent on newspaper advertising for a campaign (same units for both equations). Note that "Sales" and "Newspaper" are divided by 1,000 in the first equation because the units of the variables used to create the model were in thousands. Both equations are the same, and both equations take raw values for spending and sales.  
+  
+For every additional \$1 the company spends on newspaper advertising for a campaign, we expect houseplant sales to increase by 0.055 plants. In other words, for every additional \$1,000 the company spends on newspaper advertising for a campaign, we expect to sell an additional 55 houseplants. For a campaign in which the company spends no money on newspaper advertisements, we expect to sell 12,351 plants.
+  
+With a p-value of 0.0011 we have strong evidence of a linear relationship between newspaper ad spending and houseplant sales, there is only a 0.11% chance that we would have gotten a slope as extreme as \$1000 per 55 plants due to random chance in the absence of a truly linear relationship. However, the company must decide whether the ratio of \$1000 to 55 plants is a worthy investment. There is statistical evidence that a linear relationship exists and that the true slope of the linear equation relating newspaper spending to plant sales is non-zero, but this does not mean the strength of this relationship or the size of this slope is *practically* significant. With an $R^2$ value of 0.052 we see that only 5.2% of the variation in houseplant sales is explained by variation in newspaper ad spending, most of the variation in plants sales is unexplained by this model. Looking at the regression line fit to the scatterplot below, we can see that the data vary widely about the regression line. According to our Mean Squared Error value, this regression line is off by about 25,933 plant sales on average when predicting sales given newspaper ad spending. 
+
+
+```{r}
+# Plot Newspaper vs Sales with its regression line
+ggplot(data=Plants, aes(x=Newspaper, y=Sales)) + 
+  geom_point(color="darkred", alpha=0.6, size=3) + 
+  geom_smooth(method="lm", color="black", fill="red", formula=y~x, alpha=0.2) + # Plot regression line
+  ylab("Plant Sales  (Thousands)") +
+  xlab("Newspaper Ad Spending (Thousands of USD)")
+```
+  
+## Model 2: TV Ad Spending as a Sales Predictor
+  
+Now we look at the amount of money a campaign spends on TV advertising, `TV`, as a linear predictor of the amount of houseplant sales for a campaign, `Sales`. The model creation and summary output is shown below.
+
+```{r}
+# Create SLR model with TV ad spending predicting plant sales
+Model2 <- ols_regress(data=Plants, object=Sales~TV)
+Model2 # Display model summary
+```
+  
+The linear model above gives us the following equation:  
+  
+\[ \frac{\widehat{\text{Sales}}}{1,000}= 7.033 + (0.048) \times \left(\frac{\text{TV Spending}}{1,000} \right)\]
+  
+  or
+  
+\[ \widehat{\text{Sales}}= 7,033 + (0.048) \times \left(\text{TV Spending} \right)\]
+  
+  
+Where "Sales" is the number of plants sold during a campaign and "TV Spending" is the amount of USD spent on TV advertising for a campaign (same units for both equations). Again, "Sales" and "TV" are divided by 1,000 in the first equation because the units of the variables used to create the model were in thousands. Both equations are the same, and both equations take raw values for spending and sales.
+  
+For every additional \$1 the company spends on TV advertising for a campaign, we expect houseplant sales to increase by 0.048 plants. In other words, for every additional \$1,000 the company spends on TV advertising for a campaign, we expect to sell an additional 48 houseplants. For a campaign in which the company spends no money on TV advertisements, we expect to sell 7,033 plants.
+  
+With a p-value of ~0 we *would* have strong evidence that tthe slope of the population regression line predicting plant sales from TV ad spending is non-zero-- there is a roughly 0% chance that we would have gotten a slope as extreme as \$1000 per 48 plants due to random chance if the slope truly were 0 (again, practical significance must be considered). However, we violated SLR assumptions of linearity and homoscedasticity in the creation of this model and should therefore be cautious about making conclusions. Recall from the scatterplot that the true relationship between TV ad spending and plant sales appears to follow a curved trend, and there is likely some other process that our model isn't considering that is causing the increased variance for higher values of TV ad spending. Still, our model was able to explain ~61.2% of the variation in plant sales with variation in TV ad spending. And, according to our Mean Squared Error value, this regression line is only off by about 10,619 plant sales on average when predicting sales given TV ad spending. There is clearly some process at work here, but it does not appear to be a linear one. Looking at the regression line on scatterplot below we see that the line is a poor fit for campaigns where the smallest amounts of money were spent on TV advertisements, the most "curved" part of our data. We also see that campaigns that spend the largest amounts of money on TV ads vary much more about the regression line than campaigns in the lower percentiles of TV ad spending.
+  
+```{r}
+# Plot TV vs Sales with its regression line
+ggplot(data=Plants, aes(x=TV, y=Sales)) + 
+  geom_point(color="darkred", alpha=0.6, size=3) + 
+  geom_smooth(method="lm", color="black", fill="red", formula=y~x, alpha=0.2) + # Plot regression line
+  ylab("Plant Sales  (Thousands)") +
+  xlab("TV Ad Spending (Thousands of USD)")
+```
+  
+
+# Q3
+  
+We see a greater increase in sales when we spend more money on newspaper advertising, 55 more sales for \$1,000 extra on newspaper ads, than when we spend more money on TV advertising, 48 more sales for \$1,000 extra on TV ads. This is according to the slopes from `Model1` and `Model2` respectively.  
+  
+Even though `Model1` (newspaper predictor) has a larger slope, there is much more uncertainty in our estimate for the true slope of the line predicting sales from newspaper ad spending than our estimate in the true slope of the line predicting sales from TV ad spending. For every additional \$1,000 spent on newspaper ads we are 95% confident that we can expect 22 to 87 more houseplant sales. For every additional \$1,000 spent on TV ads we are 95% confident that we can expect 42 to 53 more houseplant sales. This is according the the upper and lower bounds of the 95% confidence intervals given in the models' summary outputs.
+
+The return on investment for spending money on newspaper ads could truly be much lower or much higher than what this particular model estimates. But the full range of plausible slopes for `Model2` (TV predictor) could be entirely within what the company sees as a modest return for their spending. The company must decide what they are willing to risk. 
+
+
+`Model2` (TV predictor) explains much more variability in `Sales` than `Model1` (newspaper predictor). According to the $R^2$ values listed in the models' summary outputs, 61.2% of the variation in plant sales is accounted for by variation in TV ad spending, whereas only 5.2% of the variation in plant sales is accounted for by variation in newspaper ad spending.  
+  
+# Q4
+  
+We'll conduct a one sided t-test for the true intercept of the population line predicting plant sales from newspaper ad spending. Recall that the units of our model is in thousands, so we scale the population parameters in our hypotheses accordingly. We are okay with incorrectly rejecting $H_0$ (1/25)= 4% of the time, so we set a significnce level of $\alpha$ = 0.04 . Let's remind ourselves of the model summary:
+
+```{r}
+# Display model summary for Sales~Newspaper
+Model1
+```
+
+  
+$H_0$: $\beta_0=8$  
+The true number of plant sales for a campaign that spends no money on newspaper advertising is 8,000.  
+  
+$H_A$: $\beta_0=8$  
+The true number of plant sales for a campaign that spends no money on newspaper advertising is greater than 8,000
+  
+We compute the test statistic using the `Model1` intercept $b_0=12.351$ and the `Model1` standard error of the intercept $se(b_0)=0.621$.  
+  
+$t^* = \frac{b_0 - \beta_0}{se( \beta_0 )} = \frac{12.351-8}{0.621}=7.006441$  
+  
+We find the probability of seeing a sample intercept of 12.351 or more extreme given that the population intercept is truly 8 with a t-distribution with $n-2$ degrees of freedom.
+  
+```{r}
+# P-value calculation
+pt( 7.006441, df=nrow(Plants)-2, lower.tail=FALSE)
+```
+p-value = $P(|t|>t^*) \approx 1.87 \times 10^{-11}\approx 0$
+  
+We reject $H_0$. With a p-value of $p\approx0<0.04=\alpha$ we have strong evidence to suggest that campaigns that spend no money on newspaper advertisements result in more than 8,000 plant sales. The probability of our sample giving us an estimate of 12,351 plant sales for campaigns that spend no money on newspaper ads when the true number of sales for such a campaign is 8,000 is almost 0%. 
+  
+The data suggests that even if the company spends no money on newspaper advertisements they will probably still be able to sell all 8,000 of their lilies. It is OK for the company not to advertise in newspapers. If our client is not a part of the company from which we got our data, we should be cautious abotu extended this conclusion to them.   
+  
+# Q5  
+    
+We'll conduct an ANOVA F-test for the linear relationship between plant sales and TV ad spending. Recall that the units of our model is in thousands, so we scale the population parameters in our hypotheses accordingly. We set a significance level of $\alpha$ = 0.01 . Let's remind ourselves of the ANOVA table for Model2:  
+
+```{r}
+# Display ANOVA table for Sales~TV
+anova(Model2$model)
+```
+
+  
+$H_0$: $\beta_1 = 0$  
+There is no linear relationship between plant sales and TV ad spending.   
+  
+$H_A$: $\beta_1 \neq 0$  
+There is a linear relationship between plant sales and TV ad spending.
+  
+We can find the F-statistic, a ratio between the Mean Squared Regression and Mean Squared Error, from the ANOVA table in the `Model2` output above.  
+  
+$F^* = \frac{MSR}{MSE} = \frac{3314.6}{10.6} \approx 312.14$  
+  
+The probability of seeing an F-statistic of 312.14 or more given that there is truly no linear relationship between plant sales and TV ad spending is listed under the last column of the ANOVA table in the Model2 output. $P(F>F^*) \approx 0$
+  
+We reject $H_0$. With a p-value of $p\approx0<0.01=\alpha$ we have strong evidence to suggest that there is a linear relationship between the amount of money a campaign spends on TV advertisements and the campaign's number of plant sales. The probability of our sample giving us an estimate of 48 plant sales for every $1,000 spent on TV advertising if there were truly no linear relationship between spending and sales is almost 0%. 
+  
+# Q6  
+  
+To build a prediction interval for the range of plausible plant sale values for a campaign for the lesser-variated-monstera-fig based off of its popularity, we first need to build a linear model with `Plant_Popularity` as a predictor of `Sales`.
+
+```{r}
+# Build SLR model with % Plant popularity as a predictor of thousands of sales
+Model3 <- ols_regress(Sales~Plant_Popularity, data=Plants)
+Model3 # Model Summary
+
+# create a data frame with the values we want predictions for
+lvmfig <- data.frame(Plant_Popularity=c(90)) 
+# Get and display predictions
+predict(Model3$model, newdata=lvmfig, interval="predict", level=0.99)
+```
+  
+We are 99% confident that a lesser-variated-monstera-fig campaign would result in between approximately 23,779 and 48,634 sales.
+  
+  
+# Q7  
+  
+To determine whether the following SLR assumptions hold for the errors $\varepsilon_i$ of `Model1` and `Model2`:
+  
+  
+  * There is a **linear** relationship between the mean responses at each value of the predictor 
+  * The errors are **independent**
+  * The errors are **Normally distributed**
+  * The errors have **equal variance**
+  
+we'll examine the residuals $e_i$ of the respective models. We'll also take a closer look at the potential outliers mentioned earlier in the report. 
+  
+## Model1 - Linearity  
+  
+  Here is the scatterplot of `Newspaper` as a predictor of `Sales` from earlier, excluding the histogram. 
+
+```{r}
+p.news +
+  geom_smooth(method="lm", color="black", fill="red", formula=y~x, alpha=0) +  # Plot regression line without confidence interval
+  theme(plot.title = element_text(hjust = 0.5)) +
+  ggtitle("Sales ~ Newspaper")
+  
+
+```
+  
+We can make out a positive linear relationship. Let's look at Residuals versus Fit plot for `Model1`, which predicted `Sales` from `Newspaper`.
+
+```{r}
+# Foundation of a residuals vs fits plot
+p.rvf <-
+  ggplot(Plants) +
+  geom_hline(yintercept=0) +
+  xlab("Fits") +
+  ylab("Residuals") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+# Since we used ols_regress() instead of lm() we must first access the model object, then get the residuals and the fits
+Plants$M1r <- Model1$model$residuals
+Plants$M1f <- Model1$model$fitted.values
+
+# Plot Model1's residuals and fits
+p.rvf1 <- 
+  p.rvf + geom_point(data=Plants, aes(x=M1f, y=M1r), color="darkred", alpha=0.5) +
+  ggtitle("Residuals vs Fits for Sales ~ Newspaper")
+
+# Display plot
+p.rvf1
+```
+
+```{r eval=FALSE, include=FALSE}
+#simpler way, but didn't like the colors
+ols_plot_resid_fit(Model1$model)
+```
+
+The residuals seem to bounce randomly about the line $e$=0. There are no patterns present in this plot of `Model1`'s Residuals vs Fits. We can assume that the errors $\varepsilon_i$ follow the same behavior and that the linearity condition is satisfied.  
+  
+## Model1 - Independence  
+    
+If the company has any information available about the order that these campaigns were run, it would be worth considering serial correlation between the campaigns. Since we don't have that data at the moment, we'll consider interactions between the 5 covariates in our data set.  
+
+Below is a correlation and scatterplot matrix for all of the variables in the `Plants` data set. We've also included the `Model1` residuals in the row/column labeled `M1r` so that the last row of the matrix is comprised entirely of Residuals vs Predictor plots. We'll refer to the entries in the matrix below with (row, column) indexing.
+  
+```{r, warning=FALSE, message=FALSE}
+# Correlation matrix for everything except the model 1 fits column
+ggpairs( Plants[, -which(names(Plants) == "M1f")] )
+```
+  
+From the Residuals vs Predictor row of our matrix, we see a pattern in the `TV`, `Plant_popularity`, and `Radio` columns. These are potentially confounding variables. Since statistical tests and intervals are sensitive to violation of the independence condition, we should look into the features discussed below before making any formal conclusions from our model. 
+  
+Looking at the (`Sales`,`TV`) entry, we see that the relationship between `Sales` and `TV` looks curved and heteroscedastic as previously noted. Looking at the (`Newspaper`,`TV`) entry, we see no apparent relationship between the two, so there's no indication of an interaction occurring strictly between those variables. Looking at the (`M1r`,`TV`) entry, which is the Residuals vs Predictor plot for the `TV` variable, we see a non-random curved pattern.  We might be able to make a better model by including the `TV` variable as a predictor. This new model may not necessarily be a linear model because the relationship between `TV` and `Sales` does not look linear. There's also still the issue of addressing the heteroscedasticity of the relationship between `TV` and `Sales`. We'll consider the `TV` variable further when checking conditions for `Model2`.  
+
+In the (`Sales`,`Plant_Popularity`) entry we see that the plot indicates a moderately strong positive linear relationship between the two variables. In the (`Plant_Popularity`, `Sales`) entry, we see that they have a statistically significant correlation of 0.585. In the Residuals vs Predictor plot in the (`M1r`, `Plant_Popularity`) entry also appears to have a positive linear pattern. We may be able to improve our model by including the `Plant_Popularity` variable and performing a multiple linear regression. The plot in the (`Newspaper`, `Plant_Popularity`) does not indicate any sort of systematic interaction between the two variables.
+
+In the (`Sales`,`Radio`) entry we see that the plot of `Sales` and `Radio` indicates a positive linear relationship between the two variables. The plot also appears heteroscedastic. The Residuals vs Predictor plot in the (`M1r`, `Radio`) entry we see the same pattern. In the (`Radio`, `Sales`) entry, we see that they have a statistically significant correlation of 0.576. We may be able to improve our model by including the `Radio` variable, but the heteroscedasticity of its relationship with `Sales`  and the possible interaction between  `Newspaper` and `Radio` (see (`Radio`,`Newspaper`) entry) should be investigated first.  
+  
+Below is a closer look at the Residuals vs Predictor plots for each potential confounding variable in relation to `Newspaper` and `Sales`. All plots share the same y-axis. The coloring below has no meaning, it is only to make the plots visually distinct from each other. 
+  
+```{r}
+# Residuals vs Predictor plots
+
+# TV predictor
+p.news.tv <- 
+  Plants %>%                  
+  ggplot( aes(x=TV, y=M1r)) +
+  geom_point(color="darkred") +
+  ylab("Residuals")
+
+# Popularity predictor
+p.news.pop <- 
+  Plants %>%                  
+  ggplot( aes(x=Plant_Popularity, y=M1r)) +
+  geom_point(color="red") +
+  theme(axis.title.y=element_blank(), axis.ticks.y=element_blank(), axis.text.y=element_blank())
+
+# Radio predictor
+p.news.rad <- 
+  Plants %>%                  
+  ggplot( aes(x=Radio, y=M1r)) +
+  geom_point(color="maroon") +
+  theme(axis.title.y=element_blank(), axis.ticks.y=element_blank(), axis.text.y=element_blank())
+
+# Display plots in a 1 by 3 matrix
+grid.arrange(p.news.tv, p.news.pop, p.news.rad, ncol=3)
+```
+  
+  
+## Model1 - Normal  
+  
+In our residuals' QQ plot, the slight dip in the center and the deviation from linearity at the extreme values indicate that the distribution of our residuals is slightly more skewed and contains more extreme data points than a Normal distribution. Both of these features are reflected in the density plot and histogram on the right.
+  
+```{r, warning=FALSE, message=FALSE}
+# Create QQ plot of residuals
+p.m1.qq <- ggqqplot(Plants$M1r, color="darkred", lwd=2) + theme_classic()
+
+# Create histogram of residuals
+p.m1.rhist <- ggplot(Plants, aes(x=M1r)) + 
+  geom_histogram(aes(y = ..density..), color = "darkred", fill = "darkred") +
+  geom_density(alpha = .5, fill = "white", size=1) + theme_classic() + # Plot density curve over histogram
+  xlab("Residuals")
+
+# Display plots
+grid.arrange(p.m1.qq, p.m1.rhist, ncol=2)
+
+# Conduct tests for normality of the residuals
+ols_test_normality(Model1$model)
+```
+  
+Out of the 4 tests for Normality, only the Kolmogorov-Smirnov test results in a failure to reject the assumption that our data is normal with $\alpha=0.05$. The majority consensus of the other hypothesis tests is that we can reject the null hypothesis that our residuals are normally distributed. However, from looking at the plots we see that the skew of the data isn't too extreme. We also have a decently large sample size of 200, so slight deviations from normality may not be of too much concern here. We may not have perfectly normal residuals but it is not of enough consequence to render `Model1` unusable.
+    
+```{r eval=FALSE, include=FALSE}
+# Didin't want to use these
+ols_plot_resid_qq(Model1$model)
+ols_plot_resid_hist(Model1$model)
+ols_test_normality(Model1$model)
+```
+    
+    
+## Model1 - Equal Variance
+  
+Again, we look at a Residuals vs. Fits plot. There is no fanning, funneling, or other systematic pattern present in this plot. All of the residuals seem to fall in a horizontal band around the line $e$=0. We have met the equal variance condition.
+
+While we're discussing variance, we can revisit the potential outliers discussed earlier (shown larger in blue). There are no individual points that look particularly out of place in this plot. The blue points fall within the same rectangular band around $e$=0, as the rest of the residuals. These points don't seem problematic. 
+  
+```{r}
+# Display Residuals vs fits, color potential outliers blue
+p.rvf1 + geom_point(data=Plants[Plants$Newspaper>90,], aes(x=M1f, y=M1r), color="blue", alpha=0.6, size=3)
+```
+  
+  
+  
+## Model2 - Linearity  
+  
+  Here is the scatterplot of `TV` as a predictor of `Sales` from earlier, excluding the histogram. 
+
+```{r}
+p.tv +
+  geom_smooth(method="lm", color="black", fill="red", formula=y~x, alpha=0) +  # Plot regression line without confidence interval +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  ggtitle("Sales ~ TV")
+  
+
+```
+  
+There is clearly a strong positive relationship here, but it does not look linear. Let's look at Residuals versus Fit plot for `Model2`, which predicted `Sales` from `TV`.
+
+```{r}
+# Get Model2's residuals and fits
+Plants$M2r <- Model2$model$residuals
+Plants$M2f <- Model2$model$fitted.values
+
+# Plot Model2's residuals and fits
+p.rvf2 <- 
+  p.rvf + geom_point(data=Plants, aes(x=M2f, y=M2r), color="darkred", alpha=0.5) +
+  ggtitle("Residuals vs Fits for Sales ~ Newspaper")
+
+# Display Plot
+p.rvf2
+```
+
+```{r eval=FALSE, include=FALSE}
+#simpler way, but didn't like the colors
+ols_plot_resid_fit(Model1$model)
+```
+
+The residuals do not fall randomly about the line $e$=0. There is a curved hook-like pattern present in this plot of `Model2`'s Residuals vs Fits. The presence of a systematic deviation from randomness in this plot confirms what we directly observed in the scatterplot. The linearity condition is not satisfied here.  
+  
+## Model2 - Independence  
+    
+Again, it would be worth considering serial correlation between the campaigns but here we simply consider interactions between the 5 covariates in our data set.  
+
+Below is the same correlation and scatterplot matrix as before, except now we include the residuals from `Model2` where `TV` predicts `Sales`. The `M2r` row now contains Residuals vs Predictor plots.
+  
+```{r, warning=FALSE, message=FALSE}
+# drop these columns
+drop = c("M1f", "M1r", "M2f")
+# Plot correlation matrix
+ggpairs( Plants[, !names(Plants) %in% drop])
+```
+  
+From the Residuals vs Plots row of our matrix, we see a pattern in the `Radio` and `Plant_popularity` columns. These are potentially confounding variables. We should look into the features discussed below before making any formal conclusions from our model. 
+  
+Looking at the (`Sales`,`Radio`) entry, we see that the relationship between the two looks positive and linear as previously noted. Looking at the (`TV`,`Radio`) entry, we see no apparent relationship between the two, so there's no indication of an interaction occurring strictly between those variables. `Radio` seems like it is independently affecting `Sales` rather than confounding the effect of `TV` on `Sales`. The (`M2r`,`Radio`) entry, which is the Residuals vs Predictor plot for the `Radio` variable, shows a positive, linear trend. We might be able to make a better model by including the `Radio` variable as a predictor.  
+
+Like before, `Sales` and `Plant_Popularity` seem to have a strong positive linear relationship with a statistically significant correlation of 0.586. The Residuals vs Predictor plot in the (`M2r`, `Plant_Popularity`) entry also appears to have a positive linear pattern. There is also a moderately strong, positive, linear relationship between `Plant_Popularity` and `TV` as demonstrated by the (`TV`,`Plant_Popularity`) plot and the statistically significant correlation of 0.545 in (`Plant_Popularity`,`TV`). It seems `Plant_Popularity` is a confounding variable in this model. It seems likely that plants for campaigns which received more TV advertising would become more popular, or that the company was willing to spend more on the TV advertisement of already popular plants. The potentially synergistic relationship between these variables could explain the heteroscedasticity of `TV~Sales` and should be further considered and included in a new model.
+  
+Below is a closer look a the Residuals vs Predictor plots for each potential confounding variable in relation to `TV` and `Sales`. All plots share the same y-axis. The coloring below has no meaning, it is only to make the plots visually distinct from each other. 
+  
+```{r}
+# Residuals vs Predictor plots
+
+# TV predictor
+p.tv.rad <- 
+  Plants %>%                  
+  ggplot( aes(x=Radio, y=M2r)) +
+  geom_point(color="darkred")
+
+# Popularity predictor
+p.tv.pop <- 
+  Plants %>%                  
+  ggplot( aes(x=Plant_Popularity, y=M2r)) +
+  geom_point(color="red") +
+  theme(axis.title.y=element_blank(), axis.ticks.y=element_blank(), axis.text.y=element_blank())
+
+# Display in a 1 by 2 matrix
+grid.arrange(p.tv.rad, p.tv.pop, ncol=2)
+```
+  
+  
+## Model2 - Normal  
+  
+In our residuals' QQ plot, the deviation from the linear pattern at the extreme values indicate that the distribution of our residuals has more data in its tails than a Normal distribution. The rest of the distribution seems approximately normal, which is reflected in the histogram on the right.
+  
+```{r, warning=FALSE, message=FALSE}
+# QQ plot of residuals
+p.m2.qq <- ggqqplot(Plants$M2r, color="darkred", lwd=2) + theme_classic()
+
+# Histogram of residuals
+p.m2.rhist <- ggplot(Plants, aes(x=M2r)) + 
+  geom_histogram(aes(y = ..density..), color = "darkred", fill = "darkred") +
+  geom_density(alpha = .5, fill = "white", size=1) + theme_classic() +
+  xlab("Residuals")
+
+# Arrange in a 1 by 2 matrix
+grid.arrange(p.m2.qq, p.m2.rhist, ncol=2)
+
+# Conduct tests for normality of the residuals
+ols_test_normality(Model2$model)
+```
+    
+Out of the 4 tests for Normality, only the Cramer-von Mises test results in a rejection of the assumption that our data is normal with $\alpha=0.05$. The majority consensus of the other hypothesis tests is that we can fail to reject the null hypothesis, there is not strong enough evidence to suggest that our residuals are  not normally distributed. `Model2`'s residuals meet the linearity condition.
+
+
+## Model2 - Equal Variance
+  
+Again, we look at a Residuals vs. Fits plot. There is a clear fanning pattern present in this plot. The residuals do not fall randomly around the line $e$=0. We have not met the equal variance condition.
+
+While we're discussing variance, we can revisit the potential outliers discussed earlier (shown largely in orange). The orange points follow the same pattern as the rest of the residuals. There are some individual points that look out of place for the lowest fit values, but this could simply be due to the poor fit of an inappropriate model.
+  
+```{r}
+# Residuals vs Fits plot, color potential outliers
+p.rvf2 + geom_point(data=Plants[Plants$Newspaper>90,], aes(x=M1f, y=M1r), color="orange", alpha=1, size=3)
+```  
+  
+  
+# Q8  
+  
+Using multiple linear regression will allow our models use more variables to account for additional variation that these models couldn't explain. Including more variables in a model may also account for patterns we saw in our residuals.  
+  
+  

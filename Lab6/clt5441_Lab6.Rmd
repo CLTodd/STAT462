@@ -1,0 +1,772 @@
+---
+title: "STAT-462: Lab 6"
+author: "Candace Todd"
+date: "March 24, 2021"
+output:
+  prettydoc::html_pretty:
+    theme: leonids
+    highlight: github
+    toc: true
+    prettydoc::toc_float: yes
+    number_sections: yes
+    df_print: paged
+  html_notebook:
+    toc: true
+    toc_float: yes
+    number_sections: yes
+    theme: lumen    
+---
+
+# Markdown
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+	fig.height = 6,
+	fig.width = 10
+)
+```
+
+
+```{r, message=FALSE,warning=FALSE}
+# Clear workspace
+rm(list=ls())
+
+# Load libraries
+library(skimr)
+library(rcompanion)
+library(plotly)
+library(gridExtra)
+library(olsrr)
+library(GGally)
+library(ggplot2)
+library(rcompanion)
+```
+
+```{r}
+# Read in data set
+bass <- read.csv(file="bassdata.csv", header=TRUE, sep=",")
+names(bass)            # `ID` variable was read in with a symbol
+names(bass)[1] <- "ID" # Fix the variable name
+names(bass)            # Inspect
+```
+# Q2 - The Data
+  
+This data was collected by a research team led by T.R. Lange in 1993 from 53 lakes in Central Florida to examine some ecological and health concerns resulting from industrial pollution. The unit of observation for this study is a Floridian lake, there are 53 rows and 53 unique entries under the `Lake` column which are each the name of a unique lake in Florida. The data contained in each row include different measures taken on the lake water and summary statistics about a sample of largemouth bass from that particular lake.
+
+There are 53 rows in this data set, which we will call the `bass` data set, which means we have data on 53 different Floridian lakes. For each lake, we have information on 11 variables:
+  
+  * `ID`: A unique number that identifies the body of water. This could be an otherwise meaningless number, but it could also indicate the order in which the observations are collected. It's exact meaning is unclear, but we will continue as if the former interpretation is true.
+  * `Lake`: The name of the body of water, some of which appear to refer to bodies other than lakes (like ponds or farms)
+  * `Alkalinity`: A measure of the alkalinity of the lake water in milligrams per Liter; "the amount of acid needed to bring the sample to a pH of 4.2" (definition from [University of Massachusetts Amherst](https://wrrc.umass.edu/research/projects/acid-rain-monitoring-project/analysis-method-ph-and-alkalinity)) in mg/L 
+  * `pH`: The pH level of the lake water
+  * `Calcium`: The calcium concentration of the lake water in milligrams per Liter (mg/L)
+  * `Chlorophyll`: The chlorophyll concentration of the lake water in micrograms per Liter (written $\mu$g/L or mcg/L)
+  * `min`: The minimum Mercury content found in the sample of largemouth bass from that lake (in micrograms, written $\mu$g or mcg)\*
+  * `max`:The maximum Mercury content found in the sample of largemouth bass from that lake (in mcg) \*
+  * `Mercury`: The typical Mercury content found in the sample of largemouth bass from that lake (in mcg) \*
+  * `No_samples`: The sample size of fish (number of largemouth bass) taken from the lake to acquire the mercury statistics \*
+  * `age_data`: context supplies this as the "age" in years, I would assume the typical age in years of bass in the sample from that lake. However, it seems odd that that so many fish would be so young when, apparently, their average lifespan is [16 years](https://tpwd.texas.gov/huntwild/wild/species/lmb/). This variable only takes on binary values of 0 and 1, which usually implies a logical indicator. I suspect this variable is a true-false indicator of whether data on the fishes' age was collected for a given lake. Or, perhaps this 0-1 distinction could be a unitless young-old designation. In any case, the exact meaning and units of this variable are unclear \* 
+  
+Our goal in examining this data is to determine whether the alkalinity levels of a lake might impact Mercury levels in largemouth bass. I am unsure of the conditions under which this data were collected, the lakes in this data may or may not be a representative sample of all lakes in central Florida, and they are most likely not a representative sample of lakes in general. For the sake of this study, we will assume the sample of largemouth bass gathered from each respective lake is a representative sample of all largemouth bass in that lake (although perhaps this is an unreasonable assumption for lakes with the smallest sample sizes). I have no background in chemistry but I imagine the weather on the day of observation could impact all of the numeric variables in the `bass` data set. Considering how water systems and water cycles work, and the fact that the study was incited by industrial pollution concerns, the location of the lakes themselves could also impact some of the variables in this data set. Both of these are potentially confounding variables. We continue with the analysis with all of this in mind.
+
+## Disclaimer
+  
+I am inferring the meaning of these starred variables as much as I can based on their names, the focus of the study, and the context of the scenario given. I am only assuming this is their true meaning. 
+  
+I initially thought `ID` was meaningless other than serving as an identifier. I assumed that the lakes were arranged in the data set and then an ID was assigned according to the lake's row number. But eventually I noticed that not every lake's ID corresponds to their row number, specifically the lakes with IDs between 47 and 51 inclusive. This could just be a scripting mistake, it does seem like lake 51 was just moved up to row 47 and everything was disjointed from there. But there is still the possibility that `ID` has some meaning.
+
+```{r}
+tail(bass,10)
+```
+
+
+I was initially unsure of what `min` and `max` referred to, but looking at how each lake's values for these variables are so closely synchronized with the lakes' values for `Mercury` led me the the aforementioned interpretation. The plot below displays this. The overall trend is unimportant, but notice that values of `Mercury` (red line) tend to be associated with similar values of `max` (blue line) and `min` (green line). This pattern was not prevalent when replacing `Mercury` with any other variable in the data. The use of a line plot here isn't necessarily appropriate since `ID` is truly categorical, so the corresponding bar chart is also shown, although the pattern isn't as apparent.
+
+```{r} 
+# Line chart
+lines <- ggplot(bass) +
+     geom_line(aes(x=ID,y=min), color="green", lwd=1,alpha=0.6)+
+     geom_line(aes(x=ID,y=Mercury), color="red", lwd=1,alpha=0.6)+
+     geom_line(aes(x=ID,y=max), color="blue", lwd=1,alpha=0.6) + ylab("")
+     
+# Bar chart
+bars <- ggplot(bass) +
+  geom_col(aes(x=ID,y=max), fill="blue",alpha=0.6)+   
+  geom_col(aes(x=ID,y=Mercury), fill="red",alpha=0.6)+ 
+  geom_col(aes(x=ID,y=min), fill="green", alpha=0.6) + ylab("")
+     
+grid.arrange(lines,bars,ncol=1)
+```
+  
+## Examining the Data  
+  
+Here is a brief look at the data.
+```{r}
+head(bass)
+```
+
+
+Below is a table of summary statistics for the `bass` data set.
+```{r}
+# Display summary statistics of the data
+skim(bass)
+```
+  
+Here we create histograms for the meaningful numeric variables (i.e. neither `ID` nor `Lake`), which will be shown after the textual description under this code.
+
+```{r}
+# Create histigrams for each meaningful numeric variable
+# Histograms will be displayed below summary (the text under this code chunk)
+
+histAlk <- ggplot(bass, aes(x=Alkalinity)) + 
+    geom_histogram(aes(y=..density..), color="grey",fill="white", bins=20)+
+    geom_density(alpha=0, fill="white",color="red",lwd=1)+
+    geom_vline(aes(xintercept=mean(Alkalinity)),color="blue", linetype="dashed", size=1)
+
+histpH <- ggplot(bass, aes(x=pH)) + 
+    geom_histogram(aes(y=..density..), color="grey",fill="white", bins=20)+
+    geom_density(alpha=0, fill="white",color="red",lwd=1) +
+    geom_vline(aes(xintercept=mean(pH)),color="blue", linetype="dashed", size=1)
+  
+
+histCal <- ggplot(bass, aes(x=Calcium)) + 
+    geom_histogram(aes(y=..density..), color="grey",fill="white", bins=20)+
+    geom_density(alpha=0, fill="white",color="red",lwd=1)+
+    geom_vline(aes(xintercept=mean(Calcium)),color="blue", linetype="dashed", size=1)
+
+histChl <- ggplot(bass, aes(x=Chlorophyll)) + 
+    geom_histogram(aes(y=..density..), color="grey",fill="white", bins=20)+
+    geom_density(alpha=0, fill="white",color="red",lwd=1) +
+    geom_vline(aes(xintercept=mean(Chlorophyll)),color="blue", linetype="dashed", size=1)
+
+histNS <- ggplot(bass, aes(x=No_samples)) + 
+    geom_histogram(aes(y=..density..), color="grey",fill="white", bins=20)+
+    geom_density(alpha=0, fill="white",color="red",lwd=1) + xlab("Sample Size") +
+    geom_vline(aes(xintercept=mean(No_samples)),color="blue", linetype="dashed", size=1)
+
+histAge <- ggplot(bass, aes(x=age_data)) + 
+    geom_histogram(aes(y=..density..), color="grey",fill="white", bins=20)+
+    geom_density(alpha=0, fill="white",color="red",lwd=1) +
+    geom_vline(aes(xintercept=mean(age_data)),color="blue", linetype="dashed", size=1)
+
+histMin <- ggplot(bass, aes(x=min)) + 
+    geom_histogram(aes(y=..density..), color="grey",fill="white", bins=20)+
+    geom_density(alpha=0, fill="white",color="red",lwd=1) + xlab(" Min Mercury") +
+    geom_vline(aes(xintercept=mean(min)),color="blue", linetype="dashed", size=1)
+
+histMerc <- ggplot(bass, aes(x=Mercury)) + 
+    geom_histogram(aes(y=..density..), color="grey",fill="white", bins=20)+
+    geom_density(alpha=0, fill="white",color="red",lwd=1) + xlab(" Typical Mercury") +
+    geom_vline(aes(xintercept=mean(Mercury)),color="blue", linetype="dashed", size=1)
+
+histMax <- ggplot(bass, aes(x=max)) + 
+    geom_histogram(aes(y=..density..), color="grey",fill="white", bins=20)+
+    geom_density(alpha=0, fill="white",color="red",lwd=1)+ xlab(" Max Mercury") +
+    geom_vline(aes(xintercept=mean(max)),color="blue", linetype="dashed", size=1)
+```
+
+  * `Alkalinity` is heavily positively skewed with a mean of 37.53 mg/L, a median of 19.6 mg/L, and a standard deviation of 38.2 mg/L
+  * `pH` is roughly symmetric and bell shaped with a slight negative skew. The mean pH level of lakes in this data is 6.59 with a standard deviation of 1.29. The median pH level of the lakes is 6.8.
+  * `Calcium` has a heavy positive skew with a mean concentration of 22.2 mg/L, a median of 12.6 mg/L, and a standard deviation of 24.93 mg/L
+  * `Chlorophyll` has a heavy positive skew, a mean of 23.12 mcg/L, a median of 12.8 mcg/L, and a standard deviation of 30.82 mcg/L
+  * The size of the bass samples for the lakes, `No_sample`, is heavily positively skewed with a mean of 13.06 bass, a median of 12 bass, and a standard deviation of 8.56 bass  
+  * `age_data` seems to follow a Bernoulli distribution, all values are either 0 or 1. The mean, median, and standard deviation are 0.81, 1, and 0.39 respectively, although these values aren't meaningful since we are unsure of the units or context behind this data. ~20% of the lakes have a value of 0 for `age_data`, ~79% (the rest) of the lakes have a value of 1 (rounding error, there is no missing data).
+  *  The minimum Mercury concentration in bass muscle tissue, `min` , is positively skewed with a mean of 0.28 mcg, a median of 0.25 mcg, and a standard deviation of 0.23 mcg 
+  * The typical Mercury concentration in bass muscle tissue, `Mercury` , is positively skewed with a mean of 0.51 mcg, a median of 0.45 mcg, and a standard deviation of 0.34 mcg
+  * `max`: The maximum Mercury concentration in bass muscle tissue, `max` , is slightly positively skewed with a mean of 0.87 mcg, a median of 0.45 mcg, and a standard deviation of 0.34 mcg
+  
+  
+The distributions for these variables and their respective means are shown below.
+
+```{r} 
+# Display histograms in a 3 by 3 matrix
+grid.arrange(histAlk,histpH,histCal,histChl,histNS,histAge,histMin,histMerc,histMax, ncol=3)
+```
+  
+The only categorical variables are `ID` and `Lake`, both of which are unique identifying values for the lake that they correspond to. Even though `ID` is recorded as a number, it is categorical in nature.
+  
+There is no missingness in our data.
+```{r}
+table(is.na(bass))
+```
+  
+# Q3 - Plotting the Data
+  
+Do alkalinity levels of a lake impact Mercury levels in largemouth bass? To investigate this research question we examine the alkalinity of lakes in central Florida, `Alkalinity`, as a predictor of the typical amount of Mercury in a largemouth bass from the lake, `Mercury`.
+
+```{r} 
+# Create scatterplot of Mercury~Alkalinity
+scatter<-
+  ggplot(bass, aes(x=Alkalinity,y=Mercury)) +
+  geom_point(data=bass, size=3,color="black",fill="blue",shape=21)+
+  geom_point(data=bass[bass$Lake=="Puzzle ",],size=3,color="black",fill="green",shape=21)+ # Color outlier green
+  xlab("Lake Alkalinity (mg/L)") +
+  ylab("Typical Amount of Mercury in Bass (mcg)") +
+  ggtitle("Mercury Content versus Lake Alkalinity")
+
+# Show interactive plot
+ggplotly(scatter)
+```
+
+Above is a plot of lake alkalinity in milligrams per Liter as a predictor of the mercury content in micrograms for largemouth bass from the lake, `Mercury~Alkalinity`. Each point in the plot above represents one row from the `bass` data set, data from one lake in central Florida. The green point represents lake 40 or Lake "Puzzle", a likely outlier lake with bass of unusually high mercury content considering the lake's alkalinity. There are no other unusual points.  
+  
+There is a moderately strong, negative association between `Mercury` and `Alkalinity` but the relationship between the two is clearly not linear. As is, it would not be appropriate to perform a simple linear regression. In addition to a clear violation of condition that the trend in the data be Linear, the non-linearity is such a dominating trait of the plot that the other conditions cannot be accurately assessed. However, transforming the data may make it appropriate for such a model.
+
+We earlier discussed the potential for confounding variables such as geographical location of the lake and the local weather on the day of observation. We also considered that our data may not be representative of all lakes in Florida depending on how the sample of lakes was chosen, and that our bass sample within one lake may not be representative of all bass in that lake for the especially small bass samples (rows for which `No_samples` is small). Any trends we do see may not be applicable beyond lakes in central Florida.
+  
+# Q4 - Initial Model
+  
+Here we fit the Simple Linear Regression model for the alkalinity of a lake in central Florida, `Alkalinity`, as a predictor of the typical amount of Mercury in a largemouth bass from the lake, `Mercury`. The model summary is printed out below. Beneath the model summary is a scatterplot of `Mercury` versus `Alkalinity` including the regression line and the confidence interval around the regression line.
+```{r}
+# Fit Mercury~Alkalinity model
+bad.model <- ols_regress(Mercury~Alkalinity, data=bass)
+bad.model
+```
+
+```{r} 
+scatter.line <- 
+  ggplot(bass, aes(x=Alkalinity,y=Mercury)) +
+  geom_smooth(data=bass,aes(x=Alkalinity,y=Mercury), method="lm", formula=y~x)+ # plot regression line
+  geom_point(data=bass, size=3,color="black",fill="blue",shape=21)+
+  geom_point(data=bass[bass$Lake=="Puzzle ",],size=3,color="black",fill="green",shape=21)+ # Color outlier green
+  xlab("Lake Alkalinity (mg/L)") +
+  ylab("Typical Amount of Mercury in Bass (mcg)") +
+  ggtitle("Mercury Content versus Lake Alkalinity")
+  
+
+  
+ggplotly(scatter.line)
+```
+From our SLR model we get the following equation
+
+\[\widehat{Mercury Content}=0.722+(-0.006) \times Alkalinity\]
+  
+Where $MercuryContent$ is the amount of mercury in micrograms in the muscle tissue of a typical fish from a lake and $Alkalinity$ is the Alkalinity (the amount of acid needed to bring lake water to a pH of 4.2) of a lake in milligrams per Liter. If our SLR assumptions of Linearity, Independence, Normal residuals, and Homoscedasticity were met, then we would interpret the model output as showing a strong, negative linear relationship between the mercury content of a fish and lake alkalinity. Our R-squared value would be telling us that about ~39.4% of the variation in bass mercury content is explained by variation in lake alkalinity. With a p-value of approximately 0 we would have strong evidence to suggest a linear relationship between bass mercury content and lake alkalinity. A lake with alkalinity of 0 mg/L would be expected to have bass with a typical mercury content of 0.722 mcg. And for every additional mg/L of alkalinity in a lake we would expect the typical mercury content of the fish to decrease by about 0.006 mcg. However, we can't really conclude any of this since our data violates the SLR assumptions.  
+
+# Q5 - Examining the Model
+  
+## SLR Assumptions (L.I.N.E)
+  
+Here we assess whether our model met the following SLR assumptions:
+  
+  * Linear data
+  * Independent errors
+  * Normally distributed errors
+  * Homoscedastic errors
+  
+To gain inference about the true error terms of our population regression line, we examine the model residuals.  
+  
+The Residual vs Fit plot clearly shows a curved trend in the residuals. The lack of a random pattern is another indicator that our data was not linear, but we could also see this directly from our scatterplots above. The data is **not linear**.  It also appears that there is more variance in the residuals for lower fitted values than for higher fitted values, our residuals have **unequal variance**. In other words, our residuals are heteroscedastic. 
+  
+```{r} 
+# Residual vs Fit plot is clearly non-random
+ols_plot_resid_fit(bad.model$model)
+
+```
+  
+Below we see evidence that our residuals are **not normally distributed**. The histogram and overlaid density plot show that the residuals are positively skewed. If our residuals were normally distributed then the quantiles of our residuals would closely follow the quantiles of a theoretical normal distribution, a relationship shown by the red line in the Quantile-Quantile (QQ) plot. But our QQ plot is clearly non-linear, showing that our residuals do not follow a normal distribution. This is reaffirmed by the results of hypothesis testing. All of the hypothesis tests below use the following hypotheses:
+
+  * $H_0$: The residuals are normally distributed
+  * $H_A$: The residuals are not normally distributed
+  
+The majority consensus of several hypothesis tests for normality is to the reject the null hypothesis. With 3 out of 4 of the p-values being approximately 0, we have evidence to suggest that the distribution of our model's residuals are non-normal. If our error terms were truly normally distributed, it is extremely unlikely that we would get residuals with this distribution.
+
+```{r} 
+# Histogram of residuals
+ols_plot_resid_hist(bad.model$model)
+
+# Normal probability plot of residuals
+ols_plot_resid_qq(bad.model$model)
+
+# Hypothesis testing for Normally Distributed Residuals
+ols_test_normality(bad.model$model)
+```
+  
+If we had information on the times and locations of these observations then it seems it would be worth investigating serial and spatial correlations just in case the lakes are not independent. In the absence of this information, we can examine the relationships between existing variables for confounding.  
+
+Below is a matrix showing the pairwise scatterplot and pairwise correlation between every numeric variable in the data set. Univariate density plots are displayed along the diagonal.
+
+`ID` seems to have no relationship with any of the other variables, which supports the interpretation that it is a meaningless variable other than as a unique identifier.
+
+As expected, `max`, `min`, and `Mercury` are all highly correlated with each other. They all have significant correlations with each other, signified by the asterisks, and their plots show a clear linear trend. Also note that any other variable with an association with `Mercury` has the same association with `min` and `max`, as seen by the similarity of all of the plots in `min` , `max` , and  `Mercury`  rows. Again, this was expected. This is evidence that our initial interpretation of the `min` and `max` variables was correct.
+
+We also see a trend in the scatterplot of `pH` versus `Alkalinity` and a significant correlation between the two, which is also to be expected because pH measures how alkaline or acidic a solution is.
+  
+The scatterplot of `Mercury` versus `Calcium` and `Mercury` versus `Chlorophyll` seem to follow the trend of an exponential decay, a curved, negative trend. However, it also seems that `Calcium` and `Chlorophyll` are each respectively interacting with `Alkalinity`, and they both seem to interact with each another-- the corresponding scatterplots all seem to have a positive and roughly linear trend. It is unclear exactly which variable is confounding the other, but there is an interaction occurring between these variables that should be investigated.
+
+```{r, message=FALSE, warning=FALSE, fig.height = 9} 
+# Show correlation matrix for meaningful numeric variables
+# Remove 2nd column, Lake name)
+ggpairs(bass[,-2], ggplot2::aes(alpha=0.5)) 
+```
+  
+In the plot below we see smaller points tend to be bluer and less alkaline while larger points tend to be more red and more alkaline. Again, each point represents one lake. `Chlorophyll` and `Calcium` are mapped to color and size respectively, so the pattern we shows that `Chlorophyll`, `Calcium`, and `Alkalinity` all seem to be following the same negative trend in their interaction with `Mercury`. 
+```{r}
+p <- bass %>%                  
+  ggplot( aes(x=Alkalinity,y=Mercury, col= Chlorophyll, size=Calcium)) +
+  geom_point() +
+  scale_color_gradient(low="blue", high="red")
+
+ggplotly(p)
+```
+
+
+There is a potential for confounding variables in our data. There is still a possibility of spatial correlation since all of these lakes exist in the vicinity of central Florida. I would not say the independence assumption is upheld. 
+
+## Unusual Points
+
+Below is a plot of each observational unit's studentized residual versus its leverage. Recall that a lake is an observational unit, so each point represents the residual and leverage of a particular lake in the data set. Since `ID` corresponds almost perfectly to the row numbers in the data set (only untrue for rows 47-51) , the number labels shown on the plot identify the lakes by their ID. 
+
+```{r} 
+ols_plot_resid_lev(bad.model$model)
+```
+  
+If we consider a "high leverage" lake to be a lake with a leverage value higher than 3 times the average leverage value, we see that the only high leverage lake is lake 15, a farm lake named "Farm-13". If we use a more conservative threshold of ~0.075 we see several more lakes with high leverage, listed below. None of these high leverage lakes are outliers, so they are not unduly influencing the model. However, lake 15, the lake named "Farm-13" might be unrepresentative of the population of interest. If we are interested in learning about "wild" lakes we may want to remove lake 15, the "Farm-13" lake from the data. It is not an outlier but it sounds like it is a body of water belonging to a fishing farm and not a naturally occurring lake. It seems inappropriate for "Farm-13" to have so much leverage but not be in our population of interest. We leave it in for now since leverage without influence is largely inconsequential (and I have no evidence other than the name that it is a fishing farm), but the appropriateness of the inclusion of this particular lake should be considered further.
+
+Here are the high leverage points in a table:
+
+```{r}
+# Calculate the cutoff value of leverage
+n <- nrow(bass)
+k <- length(coefficients(bad.model$model))
+print(paste("Conservative Leverage Threshold (Used in plot):", 2* (k/n)))
+print(paste("Leverage Threshold:", 3* (k/n)))
+bass$bad.model.leverages <- ols_leverage(bad.model$model) # Make a new column in the data for leverage values
+bass.lev <- bass[bass$ID %in% c(15,35,3,41,17,37),]       # High leverage points only
+bass.lev # Show table of high leverage points
+```
+
+If we consider a lake to be an "outlier" if it has a studentized residual greater than 3, only lake 1, lake "Alligator", is an outlier. If we use a more conservative outlier threshold we can also consider lakes 2, 5, and 40, to be moderate outliers. Lake 40, Lake "Puzzle", was one we had initially identified as a likely outlier in the scatterplot. But, none of these outliers seem highly influential, as seen by their low leverage values.
+
+Here are the outlier points in a table:
+
+```{r}
+bass$bad.model.residuals <- bad.model$model$residuals # Make a new column in the data for raw residual values
+bass.out <- bass[bass$ID %in% c(1,2,5,40),]           # Outliers only
+bass.out # Show table of outliers
+```
+When we directly examine influence with Cook's Distance we see that lakes 1,2,5, and 40, the same lakes we identified as outliers, have the highest Cook's Distance. Lake 1 and Lake 40, named Alligator Lake and Puzzle lake respectively, have drastically higher Cook's distances than most of the other data. These two points have the highest potential to be influential, but neither point has much leverage.  
+
+```{r} 
+ols_plot_cooksd_bar(bad.model$model)
+```
+
+Here are the outliers (green) and high leverage (red) points on our initial scatterplot (regular points in blue).
+```{r} 
+color.coded <-
+ggplot(bass, aes(x=Alkalinity,y=Mercury)) +
+  geom_point(data=bass, size=3,color="black",fill="blue",shape=21)+
+  geom_point(data=bass.out,size=3,color="black",fill="green",shape=21)+ # Outliers
+  geom_point(data=bass.lev,size=3,color="black",fill="red",shape=21)+   # High leverage points
+  xlab("Lake Alkalinity (mg/L)") +
+  ylab("Typical Amount of Mercury in Bass (mcg)") +
+  ggtitle("Mercury Content versus Lake Alkalinity")
+
+ggplotly(color.coded)
+```
+
+
+
+# Q6 - Highly Unusual Points
+  
+  A)  Alligator Lake has the highest residual mercury value
+  
+```{r}
+# Show highest raw residual values in the data
+head(arrange(bass, desc(bad.model.residuals)))
+```
+
+  B) Lake "Farm-13" has the highest leverage
+  
+```{r}
+# Show highest leverage values in the data
+head(arrange(bass, desc(bad.model.leverages)))
+```
+
+  C) Puzzle Lake has the highest Cook's Distance
+
+```{r}
+# Make a new column in the data for cooks distance
+bass$bad.model.cooksD <- cooks.distance(bad.model$model)
+
+# Show highest Cook's Distance values in the data
+head(arrange(bass, desc(bad.model.cooksD)))
+```
+  
+# Q7 - Influential Points Discussion
+  
+I disagree. While Lake 1 and Lake 40, Alligator Lake and Puzzle Lake respectively, have the largest Cook's distances values, these same points have small leverage values, which suggests they have little influence on their predicted values. They also have small Cook's Distances in general , considering the threshold for flagging is usually at around 0.5. These two points have the potential to be influential, but have little leverage. Notice how in the scatterplot below the lakes with high Cooks Distance have low leverage. 
+
+```{r, message=FALSE,warning=FALSE} 
+# Plot of Cook's Distance versus Leverage
+# Notice how points with high Cooks Distance have low leverage
+cooks.v.lev <- 
+  ggplot(data=bass, aes(x=bad.model.cooksD,y=bad.model.leverages)) + 
+  geom_point(size=3,color="black",fill="blue",shape=21, alpha=.6)+ 
+  xlab("Cooks Distance") +
+  ylab("Leverage") 
+
+# Show interactive plot
+ggplotly(cooks.v.lev)
+
+# Leverage and Cook's distance of the outiler points
+bass[bass$ID %in% bass.out$ID,][,-2:-12]
+```
+
+If you remove these lakes and refit the model the estimated slope and intercept do not change that much, meaning the removed points don't have much of an impact on the parameter estimation. These points appear to just be outliers with a high Cook's Distance.  
+
+All of the following models use the formula $\widehat{Mercury Content}= \text{intercept}+(\text{slope}) \times Alkalinity$
+
+| Model Name | Omitted Lake ID | Omitted Lake Name(s) | Intercept   | Slope |       
+|------------|------------|-------------------|-------------|--------------|
+| bad.model  | None       | None              | 0.722166540 | -0.005567758 |
+| linmod.1   | 1          | Alligator         | 0.692194622 | -0.005205789 |
+| linmod.40  | 40         | Puzzle            | 0.726240485 | -0.006023931 |
+| linmod.1.40| 1 and 40   | Alligator and Puzzle| 0.69630695 | -0.00566135 |
+
+
+```{r}
+# Above table is showing values from these models
+
+# Create 3 new models
+lindmod.1 <- lm(Mercury~Alkalinity, bass[-1,])    # Model without lake 1
+lindmod.40 <- lm(Mercury~Alkalinity, bass[-40,])   # Model without lake 40
+lindmod.1.40 <- lm(Mercury~Alkalinity, bass[-c(1,40),]) # Model without lake 1 or lake 40
+```
+  
+# Q8 - Transformation Discussion  
+
+First, I would try transforming `Alkalinity` and model `Mercury~log(Alkalinity)`. Since non-linearity is the biggest issue, the first step should be to transform the predictor. I would try a log transformation because it seems like making the lakes with lower `Alkalinity` further apart and making the lakes with higher `Alkalinity` closer would make the overall pattern look more linear. It's hard to truly identify any other problems with Normality and Homoscedasticity when the model is very wrong, so we would take care of linearity fisrt. If there were issues after transforming `Alkalinity`, then we would consider transforming `Mercury` as well.
+  
+
+# Q9 - Transforming the Predictor  
+  
+Here we create the two models and some plots to asses their fit.
+
+```{r}
+### Creating Models and Plots
+
+## First model: Mercury~ln(Alkalinity)
+
+bass$logAlkalinity <- log(bass$Alkalinity)
+lm.logAlk <- ols_regress(Mercury~logAlkalinity,data=bass)
+
+# Add residuals and fits to data
+bass$logAlk.resid <- lm.logAlk$model$residuals
+bass$logAlk.fits <- lm.logAlk$model$fitted.values
+
+# Model Plot
+p.logAlk <-
+  ggplot(data=bass, aes(x=logAlkalinity, y=Mercury)) + 
+  geom_smooth(method="lm",formula=y~x) +
+  geom_point(size=3,color="black",fill="blue",shape=21,alpha=0.6) +
+  ggtitle("Mercury ~ ln(Alkalinity)") +
+  xlab("ln(Lake Alkalinity) (mg/L)")+
+  ylab("Typical Amount of Mercury in Bass (mcg)")
+  
+# Residual vs Fits Plot
+p.logAlk.resid.fits <-
+  ggplot(data=bass, aes(x=logAlk.fits, y=logAlk.resid)) + 
+  geom_hline(yintercept=0, lty=2, size=1.2) +
+  geom_point(size=3,color="black",fill="blue",shape=21,alpha=0.6) +
+  ylab("Residuals") +
+  xlab("Fits")
+
+# Residual Histogram and Density plot
+p.logAlk.hist <-
+  ggplot(bass, aes(x=logAlk.resid)) +
+  geom_histogram(aes(y=..density..), color="grey",fill="white", bins=20)+
+  geom_density(alpha=0.1, fill="blue",color="blue",lwd=1) +
+  xlab("Residuals")
+
+## Second model: Mercury~ sqrt(Alkalinity)
+
+bass$sqrtAlkalinity <- sqrt(bass$Alkalinity)
+lm.sqrtAlk <- ols_regress(Mercury~sqrtAlkalinity,data=bass)
+
+# Add residuals and fits to data
+bass$sqrtAlk.resid <- lm.sqrtAlk$model$residuals
+bass$sqrtAlk.fits <- lm.sqrtAlk$model$fitted.values
+
+# Model Plot
+p.sqrtAlk <-
+  ggplot(data=bass, aes(x=sqrtAlkalinity, y=Mercury)) + 
+  geom_smooth(method="lm",formula=y~x, color="red") +
+  geom_point(size=3,color="black",fill="red",shape=21,alpha=0.6) +
+  ggtitle("Mercury ~ sqrt(Alkalinity)")+
+  xlab("srqt(Lake Alkalinity) (mg/L)")+
+  ylab("Typical Amount of Mercury in Bass (mcg)")
+  
+# Residuals vs fits
+p.sqrtAlk.resid.fits <-
+  ggplot(data=bass, aes(x=sqrtAlk.fits, y=sqrtAlk.resid)) + 
+  geom_hline(yintercept=0, lty=2, size=1.2) +
+  geom_point(size=3,color="black",fill="red",shape=21,alpha=0.6) +
+  ylab("Residuals") +
+  xlab("Fits")
+
+# Residual Histogram and Density plot
+p.sqrtAlk.hist <-
+  ggplot(bass, aes(x=sqrtAlk.resid)) +
+  geom_histogram(aes(y=..density..), color="grey",fill="white", bins=20)+
+  geom_density(alpha=0.1, fill="red",color="red",lwd=1) +
+  xlab("Residual Distribution")
+```
+
+
+ From The model summaries, the plots, and the comparison Critera such as the AIC score and the Adjusted R-squared values, the model predicting fish mercury content from $ln(\text{Lake Alkalinity})$ performs better than the model predicting fish mercury content from $\sqrt{\text{Alkalinity}}$, and both of these models are better than the original model. The models result in the following equations:  
+   
+   \[\widehat{Mercury Content}=1.1173+(-0.2013) \times \ln(Alkalinity)\]
+   
+   \[\widehat{Mercury Content}=0.9172+(-0.0758) \times \sqrt{Alkalinity}\]  
+  
+Below are the summaries for each model.
+ 
+```{r}
+# Display both model summaries
+
+lm.logAlk  # Mercury~ln(Alkalinity) model summary
+lm.sqrtAlk # Mercury~ sqrt(Alkalinity) model summary
+```
+  
+Here we plot the regression line for both models, along with the distribution of their respective residuals. Comparing the scatterplots, the log transformations (blue) seems to have done the best job in making the data linear. The plot which uses the square root transformation (red) still seems to have a curved pattern, the points are mostly above the regression line for highest and lowest values of the predictor. This curved pattern becomes more apparent in the Residuals vs Fits plot for this model (red). The red residuals clearly have a curved, and potentially heteroscedastic, pattern, as well as a clear outlier. The blue residuals also have two potential outliers, but the overall pattern in the plot seems random and homoscedastic.
+  
+```{r, fig.width = 10, fig.height = 10}
+#Plot results side by side
+grid.arrange(p.logAlk,            p.sqrtAlk,
+             p.logAlk.resid.fits, p.sqrtAlk.resid.fits,
+             p.logAlk.hist,       p.sqrtAlk.hist,
+             ncol=2)
+```
+  
+
+Here we use different information criterion to compare the three models we've made so far. We see that the original model predicting bass Mercury content from raw lake Alkalinity, which is named `bad.model`, performs the worst. `bad.model` has the highest AIC, AICc, and BIC scores and the lowest R-squared and Adjusted R-squared values, meaning it has the poorest model among the three and it explains the least amount of variation in the data. Looking at the bottom two rows of the comparison output below, we see that the model predicting bass Mercury content from $\ln( \text{lake Alkalinity})$ (second row) is the best model. It has the lowest AIC, AICc, and BIC scores and explains the most variation in the data (highest R-squared value). The model predicting bass Mercury content from $\sqrt{\text{lake Alkalinity}}$ (third row) almost explains as much variation in the data as the previous model, but has worse AIC, AICc, and BIC scores.
+
+```{r}
+# Compare both models with the original
+compareLM(bad.model$model, lm.logAlk$model, lm.sqrtAlk$model)
+```
+
+
+# Q10 - Examining the Log Transformation
+  
+## Model Summary
+  
+```{r}
+# Display Model Summary
+lm.logAlk
+
+p.logAlk
+```
+  
+The scatterplot of our transformed data shows a negative linear association between bass mercury content and log lake Alkalinity. By transforming the data, we have eliminated the issue of non-linearity. Now, a simple linear regression is an appropriate way to model out data.
+  
+The model predicting bass Mercury content from log lake Alkalinity is:  
+  
+ \[\widehat{Mercury Content}=1.1173+(-0.2013) \times \ln(Alkalinity)\]
+  
+Where $Mercury Content$ is the amount of mercury in mcg found in a typical largemouth bass from a lake and $\ln(Alkalinity)$ is the natural log of the measure of Alkalinity of a lake in mg/L. With a p-value of almost 0 for the ANOVA F-test for linear association, we have strong evidence to suggest that there is truly a linear relationship between log lake Alkalinity and bass mercury content. For every additional log mg/L Alkalinity of a lake, we expect the mercury content of a typical fish from that lake to decrease by 0.2013 mcg of mercury. This model can account for ~52.6% of the variation in typical bass mercury content with variation in log lake Alkalinity. On average, our model is off by about 0.055 mcg when predicting bass mercury content from log lake alkalinity. Recall that the R-squared and MSE for our initial model with no transformations were 39.49% and 0.71 respectively, a worse performance than this model. Also recall that using this transformation as opposed to the raw data values yields a better model based on the AIC and BIC information criteria as well. This model is a better fit than the original.  
+  
+## SLR Assumptions (L.I.N.E)
+
+```{r}  
+p.logAlk.qq <- ols_plot_resid_qq(lm.logAlk$model, print_plot = FALSE)
+p.logAlk.resid.fits <- p.logAlk.resid.fits + ggtitle("Residuals vs Fits")
+p.logAlk.hist <- p.logAlk.hist + ggtitle("Residual Distribution")
+grid.arrange(p.logAlk, p.logAlk.resid.fits,p.logAlk.hist, p.logAlk.qq )
+```
+
+
+The scatterplot of the transformed data appears to follow a linear trend and the Residuals vs Fits plot appears to have a random pattern, **linearity is satisfied** with the log transformation.  
+  
+At first glance there appears to be  a slight fanning pattern if you ignore the two possible outliers in the Residual vs. Fits plot, , but an F-test for heteroscedasticity gives us a p-value of ~0.14>0.5=$\alpha$. We fail to reject the null hypothesis that our data is homoscedastic, there is not strong enough evidence to suggest a deviation from homoscedasticity in our residuals (test output below). We can assume the **equal variance** condition is satisfied.
+
+```{r}
+# ANOVA F-test for Heteroskedasticity
+ols_test_f(lm.logAlk$model)
+```
+  
+We can see from the density plot that the residual distribution is positively skewed. The dip below the line in the QQ plot indicates this skew, and the deviation from the line in the upper tails of the distribution indicates that there is more data in the tails of the residual distribution than in a Normal distribution. Statistical tests for normality confirm this. Out of four hypothesis test, each with null hypotheses that our residuals *are* normally distributed, the majority of the results have a p-value of almost 0 which leads us to reject the null hypothesis (test results below). We have evidence to suggest that **our residuals are not normally distributed**, which echoes what we saw in the plots. However, the hypothesis test and confidence intervals that gives us our estimates for $\beta_0$ and $\beta_1$, the intercept and slope respectively of the regression equation, are robust to non-normal residuals. This deviation from normality may only be of concern if we wish to create prediction intervals, but it is not worth throwing away the model.
+
+
+```{r}
+ols_test_normality(lm.logAlk$model)
+```
+
+Again, it would be worth investigating serial and spatial correlations but in the absence of this information, we can examine the relationships between existing variables for confounding.  
+
+Below is a matrix showing the pairwise scatterplot and pairwise correlation between every meaningful numeric variable in the data set. Univariate density plots are displayed along the diagonal.
+
+As before, `max`, `min`, and `Mercury` are all highly correlated with each other. 
+
+Like before with raw `Alkalinity`, we see a trend in the scatterplot of `pH` versus `logAlkalinity` and a significant correlation between the two. This time the relationship is a strong positive linear one as opposed to a curved relationship it has with the raw variable. Again, a relationship between these variables is not surprising considering pH measures acidity and alkalinity.
+  
+As before, the scatterplot of `Mercury` versus `Calcium` and `Mercury` versus `Chlorophyll` seem to follow the trend of an exponential decay, a curved, negative trend. `Calcium` and `Chlorophyll` each respectively have a positive association with `logAlkalinity` and are each interacting with each another. This relationship looked roughly linear with the raw `Alkalinity` but the relationship with `logAlkalinity` is curved. It is unclear exactly which variable is confounding the other, but there is an interaction occurring between these variables that should be investigated.
+
+```{r, message=FALSE, warning=FALSE, fig.height = 9} 
+# Show correlation matrix for meaningful numeric variables
+# Only use the meaningful numeric variables from the original data set and the transformed ln(Alkalinity) variable
+
+keep <- c("pH","Calcium","Chlorophyll","No_samples","min","max","Mercury","age_data","logAlkalinity","Alkalinity") 
+
+ggpairs(bass[,keep], ggplot2::aes(alpha=0.5)) 
+```
+   
+ In the plot below each point represents one lake. Lakes with more chlorophyll have more red points and lakes with more calcium are represented by the larger points. We see smaller points tend to be bluer and have lower log alkaline values, while larger points tend to be more red and have higher log alkaline values. So, the pattern we shows that `Chlorophyll`, `Calcium`, and `logAlkalinity` all seem to be following the same negative trend in their interaction with `Mercury`. We could see this trend when we mapped `Chlorophyll` and `Calcium` to color and size on the `Mercury~Alkalinity` plot from before, but the trend is cleared when take the log of Alkalinity.
+```{r, message=FALSE, warning=FALSE} 
+p2 <- bass %>%                  
+  ggplot( aes(x=logAlkalinity,y=Mercury, col= Chlorophyll, size=Calcium)) +
+  geom_point() + xlab("ln(Lake Alkalinity) (in mg/L)") +
+  scale_color_gradient(low="blue", high="red")
+
+ggplotly(p2)
+```
+  
+There is still a potential for confounding variables in our data. Also, the possibility of spatial correlation seems very plausible since all of these lakes exist in the vicinity of central Florida. Without any way to assess this, I would not be comfortable in assuming independence is upheld. 
+  
+## Unusual Points  
+  
+Below is a plot of each observational unit's studentized residual versus its leverage. Recall that a lake is an observational unit, so each point represents the residual and leverage of a particular lake in the data set. Since `ID` corresponds almost perfectly to the row numbers in the data set (only untrue for rows 47-51) , the number labels shown on the plot identify the lakes by their ID. 
+
+```{r} 
+ols_plot_resid_lev(lm.logAlk$model)
+```
+  
+We see that the only high leverage lake is in row 50, lake 49 or Tsala Apopka Lake. Lakes 1,2, and 40, Alligator, Annie, and Puzzle Lake respectively, are outliers. We have no highly influential points, but there is one unidentified point that may be classified as such if more conservative thresholds are chosen. 
+  
+Note that there is one unlabeled blue point on the plot above that is very close to crossing both the leverage and residual threshold, lake 5 or Brick Lake. This is the only point that is close to being an influential point.
+
+Here are the high leverage points in a table, including Brick Lake:
+
+```{r}
+# Calculate the cutoff value of leverage
+n <- nrow(bass)
+k <- length(coefficients(lm.logAlk$model))
+print(paste("Conservative Leverage Threshold (Used in plot):", 2* (k/n)))
+print(paste("Leverage Threshold:", 3* (k/n)))
+bass$lm.logAlk.leverages <- ols_leverage(lm.logAlk$model) # Make a new column in the data for leverage values
+bass.lev <- bass[bass$lm.logAlk.leverages>0.07,]          # High leverage points only
+bass.lev
+```
+
+Here are the outlier points in a table, including Brick Lake:
+
+```{r}
+bass$lm.logAlk.residuals <- lm.logAlk$model$residuals # Make a new column in the data for raw residual values
+bass.out <- bass[bass$ID %in% c(1,40,2,5),]           # Outliers only
+bass.out
+```
+
+When we directly examine influence with Cook's Distance we see that lakes 1,2,5, and 40, the same lakes we identified as outliers plus Brick lake, have the highest Cook's Distance. Lake 1 and Lake 40, named Alligator Lake and Puzzle lake respectively, have drastically higher Cook's distances than most of the other data. These two points have the highest potential to be influential, but neither point has much leverage. Brick Lake has a moderately high leverage and a moderately high studentized residual, as well as a relatively high Cook's Distance. Brick lake seems to be a moderatley influential point.
+
+```{r} 
+ols_plot_cooksd_bar(lm.logAlk$model)
+```
+
+Here are the outliers (green) and high leverage (red) points on our initial scatterplot (regular points in blue). Brick lake is shown as a yellow diamond.
+
+```{r} 
+brick <- bass[5,]
+color.coded.2 <-
+ggplot(bass[-5,], aes(x=logAlkalinity,y=Mercury)) +
+  geom_point(data=bass[-5,], size=3,color="black",fill="blue",shape=21)+
+  geom_point(data=bass.out[-3,],size=3,color="black",fill="green",shape=21)+ # Outliers
+  geom_point(data=bass.lev[-1,],size=3,color="black",fill="red",shape=21)+   # High leverage points
+  geom_point(data=brick,size=3,color="black",fill="yellow",shape=23)+
+  xlab("ln(Lake Alkalinity) ( in mg/L)") +
+  ylab("Typical Amount of Mercury in Bass (mcg)") +
+  ggtitle("Mercury Content versus Lake Alkalinity")
+
+ggplotly(color.coded.2)
+```
+
+# Q11 - Advice for the Public  
+  
+To predict the plausible mercury values for largemouth bass from a new lake, we will create a prediction interval with a 99% confidence level. Note that because our residuals were positively skewed, this prediction interval is probably going to capture lower mercury levels that is should not be capturing and it will not capture some higher mercury levels that is should capture. We continue with caution.
+
+```{r}
+new.lake <- data.frame(logAlkalinity=c(log(40)))
+pred <- predict(lm.logAlk$model,newdata=new.lake,interval="predict",level=0.99)
+pred
+```
+If the residuals were normally distributed we would conclude with 99% confidence that the range of plausible values for mercury content in a largemouth bass from this new lake is less than or equal to 1.012 mcg of mercury (we would have the inclusive interval from -0.26 to 1.01, but a negative mercury level is not interpretable). However the true distribution of our residuals seemed positively skewed, not Normal as was assumed in calculating this prediction interval, so this interval isn't capturing some higher mercury values that it should. In any case, the interval already included 1 mcg mercury, so we would not conclude largemouth bass from this new lake to be safe to eat anyway. This person should not eat largemouth bass from this lake.
+  
+We can't extend this conclusion to other fish species, so unless the fish that this person caught was also a largemouth bass we don't have the right information to accurately answer their question.
+  
+# Q12 - Safety Threshold for Alkalinity   
+  
+  
+We'll compute the prediction standard error, $se(prediction)$ , by using the interval above. As a reminder, this is the interval we hve:
+
+```{r}
+pred
+```
+
+
+So we have this formula: 
+  
+\[\text{Prediction Interval}= prediction \pm t^*_{\alpha/2,n-2} \times se(prediction)\]
+  
+\[\text{PI}_{\text{upper limit}} = prediction + t^*_{\alpha/2,n-2} \times se(prediction)\]
+  
+\[1.012571 \mu g = 0.3747508 + t^*_{\alpha/2,n-2} \times se(prediction)\]
+  
+We have a significance level of $\alpha$=0.05 and $n-2$=51 degrees of freedom, so we can find our critical value $t*$ easily.  
+  
+```{r}
+alpha <- 0.05
+df <- nrow(bass)-2
+t.star <- qt(1- (alpha/2), df)
+print(paste("t*:", t.star))
+```
+
+  
+\[1.012571 = 0.3747508 + 2.007584 \times se(prediction)\]
+  
+\[1.012571 = 0.3747508 + 2.007584 \times se(prediction)\]
+  
+\[0.6378202 =  2.007584 \times se(prediction)\]
+    
+\[0.3177054 = se(prediction)\]
+
+Now that we have a set critical value and a standard error of prediction, we can find the predicted mercury value that has a prediction interval whose upper limit is 1 mcg of mercury. So we are solving for $prediction$ in the equation below. 
+  
+\[\text{PI}_{\text{upper limit}} = prediction + t^*_{\alpha/2,n-2} \times se(prediction)\]
+  
+\[1 \mu g = prediction + t^*_{\alpha/2,n-2} \times se(prediction)\]
+  
+\[1 \mu g = prediction + 2.007584 \times 0.3177054\]
+  
+\[1 \mu g = prediction + 0.6378202\]
+
+\[0.3621798 \mu g = prediction\]
+  
+Now we solve for the alkalinity of a lake whose fish have a predicted mercury content of ~0.362 mcg of mercury. To solve for this, we go back to our regression equation. 
+  
+\[\widehat{Mercury Content}=1.1173+(-0.2013) \times \ln(Alkalinity)\]
+  
+\[0.3621798 = 1.1173+(-0.2013) \times \ln(Alkalinity)\]
+  
+\[0.3621798 = 1.1173+(-0.2013) \times \ln(Alkalinity)\]
+  
+\[-0.7551202 = -0.2013 \times \ln(Alkalinity)\]
+  
+\[3.751218 = \ln(Alkalinity)\]
+
+\[e^{3.751218} = e^{\ln(Alkalinity)}\]
+
+\[42.5729 \text{mg/L} = Alkalinity\]
+  
+We would set the cutoff of the lake alkalinity to be ~ 42.57 mg/L .
+
+
+
+
+
+
+
+
+
+
+
+

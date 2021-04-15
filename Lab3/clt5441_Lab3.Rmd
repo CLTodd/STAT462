@@ -1,0 +1,291 @@
+---
+title: "STAT-462: Lab 3"
+author: "Candace Todd"
+date: "Feb. 17, 2021"
+output:
+  html_document:
+    toc: true
+    toc_float: yes
+    number_sections: yes
+    theme: cerulean
+    df_print: paged
+  html_notebook:
+    toc: true
+    toc_float: yes
+    number_sections: yes
+    theme: cerulean 
+---
+
+# Markdown  
+  
+```{r, message=FALSE, warning=FALSE}
+# Load libraries
+library(tidyverse)
+library(skimr)
+library(dplyr)
+library(data.table)
+library(ggpubr)
+library(Stat2Data)
+library(corrplot)
+library(olsrr)
+library(sf)     
+library(tmap)   
+library(readxl) 
+library(plotly)
+```
+
+
+```{r, Sofie, echo=FALSE, fig.cap="My cat, Sofie, crossing her arms like a proper little lady."}
+knitr::include_graphics('proper_sofie.png')
+```
+
+# Regression Basics  
+ 
+```{r}
+data(TextPrices)
+#View(TextPrices)
+```
+
+## Q1
+
+The TextPrices data set is from the Stat2Data package. The data includes the price in dollars and number of pages for a random sample of 30 textbooks from the campus bookstore at Cal Poly - San Luis Obispo. There are 30 rows, one for each textbook, and 2 columns, both of numeric variables, in the data. The `Pages` variable has a mean of 465 pages and the `Prices` variable has a mean of $65. The distribution of both variables appears skewed right.
+
+```{r}
+#help(TextPrices)
+skim(TextPrices)
+head(TextPrices)
+```
+
+## Q2
+  
+I would say `Price` variable is the response variable. Not only is it stated in the documentation that the purpose of the data is to predict `Price`, it also makes intuitive sense because a book is written *first*, and then the price of the book is determined by a number of different factors, one of which could be page number. 
+  
+## Q3
+
+The predictor variable here is `Pages.` A book is written first, and after it has been written a price is determined. It fits into the natural process of getting a book to market for the number of pages to predict things that come after the book is written, like popularity, physical size, and price.
+
+## Q4
+ 
+```{r}
+
+plot(x     = TextPrices$Pages, # x data
+     xlab  = "Number of Pages",# x axis label
+     xlim  = c(0,1200),        # x axis range
+     y     = TextPrices$Price, # y data
+     ylab  = "Price ($)",      # y axis label
+     ylim  = c(0,200),         # y axis range
+     main  = "Textbook Data",  # Title
+     pch   = 21,               # Use filled circle markers for points
+     cex   = 1.65,             # size of markers
+     col   = "#154360",        # outline color (hexadecimal)
+     bg    = "#2980B9",        # fill color " "
+     lwd   = 2,                # marker outline thickness
+     frame = FALSE)            # remove plot frame
+```
+
+
+## Q5 
+  
+We have a scatterplot of how the number of pages in a textbook predicts to the price of a text book. Each point represents the exact price and page count recorded for one textbook out of a random sample of 30 textbooks from a university book store, collected by undergraduates at Cal Poly - San Luis Obispo. Any insight we get from this data may point to a trend in all textbooks at that university book store. There are many other features of a textbook, such as subject, cover material, audience, etc., that are very likely to have some relationship to textbook price and which may have some influence on the patterns shown in the plot. From the shape of the data, there appears to be a moderate, positive, linear relationship between page count and textbook price. There don't appear to be any extreme outliers, but the textbooks represented at the following coordinates do look further outside the main cluster of data: (400, 128.5), (600, 19.5), (930, 70.75), (1060, 169.75).
+  
+## Q6  
+  
+```{r}
+book.model <- lm(data=TextPrices, formula=Price~Pages)
+summary(book.model)
+```
+
+## Q7  
+  
+\[ \hat{\text{Price}}= -3.42231 + 0.14733 \times (\text{Page Count}) \]  
+  
+## Q8
+  
+According to the model, for every 1 page increase, the price increases about \$0.14. Then, for every 50 page increase, the price increases by about  \$0.14733 $\times$ 50 $\approx$ \$7.37.  
+  
+## Q9  
+  
+```{r}
+plot(x     = TextPrices$Pages, # x data
+     xlab  = "Number of Pages",# x axis label
+     xlim  = c(0,1200),        # x axis range
+     y     = TextPrices$Price, # y data
+     ylab  = "Price ($)",      # y axis label
+     ylim  = c(0,200),         # y axis range
+     main  = "Textbook Data",  # Title
+     pch   = 21,               # Use filled circle markers for points
+     cex   = 1.65,             # size of markers
+     col   = "#154360",        # outline color (hexadecimal)
+     bg    = "#2980B9",        # fill color " "
+     lwd   = 2,                # marker outline thickness
+     frame = FALSE)
+abline(book.model, col="#154360", lwd=1.5) # regression line
+```
+
+
+# House Prices   
+  
+## Q1
+
+```{r}
+house <- read_excel("Lab03_house.xlsx")
+```
+  
+## Q2
+
+This data contains information about 414 houses in Sindian Dist., New Taipei City, Taiwan with the aim of predicting each house's market price. There are 414 rows and 6 variables:
+
+  * `House.Age`: House age in years
+  * `Distance.Station`: distance to the nearest transit (MRT) station
+  * `Number.Shops`: the number of convenience stores nearby (the [documentation](https://archive.ics.uci.edu/ml/datasets/Real+estate+valuation+data+set) says *"in the living circle on foot"*, which I'm interpreting to mean nearby)
+  * House `Latitude` in degrees
+  * House `Longitude` in degrees
+  * `House.Price` in House price per house area units of 10,000 New Taiwan Dollar (NTD) per Ping  
+  
+There's no indication of how this data was collected in the documentation, so we should be cautious about the generalizability of our inferences. In any case, this data is only on houses in one specific district in Taiwan, so it only make sense to extend our inferences to that population. 
+  
+```{r}
+summary(house)
+skim(house)
+head(house)
+```
+  
+
+## Q3  
+
+
+Most of the houses, about 67% of the data, are between 24,3737 and 51,5867 NTD/Ping. This is close to the amount of data a normal distribution has within 1 standard deviation of the mean. This data follows a normal distribution decently well in the middle of the distribution, but deviates from the normal distribution at the tails. 
+  
+From the histograms we can see that the distribution of all of the house prices appears positively skewed, but the distribution that excludes the outlier looks more normal. Note that the histogram axes are the same for the purposed of comparison, but the exclusive histogram lacks the outlier at 1,175,000 NTD/Ping making the distribution less skewed. Looking at the results of formal testing, we see that the inclusive data fails the Shapiro-Wilk test but the data excluding the outlier narrowly satisfies the test at $p=0.0169>\alpha=0.01$ significance level. So, for the most part the data does appear roughly normal but it includes some outliers that may need to be further investigated.
+```{r}
+h.p <-house$House.Price
+summary(h.p)
+mean.h.p <- mean(h.p)
+sx <- sd(h.p)
+p <- nrow(filter(house, House.Price <= (mean.h.p+sx), House.Price>=(mean.h.p-sx)))/nrow(house) # proportion between +-1sd
+print(paste(round(p*100,4), "% of the inclusive data is within 1 standard deviation of the mean, in the interval [",round(mean.h.p-sx,4), ",",round(mean.h.p+sx,4), "]", sep=""))
+
+# QQ Plot
+ggqqplot(h.p, color="#2980B9", lwd=2)
+
+# Remove outlier
+h.p.f <- filter(house, House.Price<117)$House.Price
+
+# Histograms
+par(mfrow=c(2,1))
+hist(h.p, border ="#154360", col="#2980B9", xlab="Tens of Thousands of NTD per Ping", main="Inclusive House Price Data", breaks=30, xlim=c(0,120)) # Inclusive plot
+abline(v=mean.h.p, col="#154360", lwd=3, lty=2) # mean
+hist(h.p.f, border ="#154360", col="#2980B9", xlab="Tens of Thousands of NTD per Ping", main="Exclusive House Price Data", breaks=30,xlim=c(0,120)) # Exclusive plot
+abline(v=mean(h.p.f), col="#154360", lwd=3, lty=2) # mean
+
+shapiro.test(h.p)
+shapiro.test(h.p.f)
+```
+  
+## Q4
+  
+The following scatter plot shows the price-per-area data for houses in the Sindian District of New Taipei City, Taiwan depending on Latitude of the house. Each ring represents one of the 414 houses for which data was collected, with Latitude in degrees on the horizontal axis and the price-per-area of the house in local units and currency. There are many factors about a house that influences its price, many of which are variables included in the rest of the data set, which could be confounding any patterns we see. Additionally, it is rarely just the exact location of a house that affects its price. More often it is the house's location *relative something else*, be it schools, cities, natural landscapes, etc. Again, there are other variables in this data set which measures these. Lastly, the 2 northernmost and most expensive houses seem to be outliers. Nevertheless, there appears to be a weak, positive, linear association between the houses' unit price and latitude.   
+  
+  
+```{r}
+house.lm <- lm(House.Price~Latitude, house)
+plot(x     = house$Latitude, # x data
+     xlab  = "Latitude (Degrees)", # x axis label
+     xlim  = c(24.92,25.02),         # x axis range
+     y     = house$House.Price, # y data
+     ylab  = "Tens of Thousands of NTD per Ping",      # y axis label
+     ylim  = c(0,120),         # y axis range
+     main  = "House Price Data",  # Title
+     pch   = 21,               # Use filled circle markers for points
+     cex   = 1,             # size of markers
+     col   = "#154360",        # outline color (hexadecimal)
+     lwd   = 2,                # marker outline thickness
+     frame = FALSE)
+abline(house.lm, col="#2980B9", lwd=2)
+```
+
+
+## Q5
+  
+All these houses are in the same district, so they are probably in some of the same neighborhoods. Within a neighborhood houses are constructed similarly, and similarly built houses are priced similarly. The price of a nearby house, often called a "comp" in real estate jargon, influences how the houses around it are be priced. Considering all of this, I think it is fairly safe to say that these prices are *not* independent, therefore the residuals from the model will not be independent. Also, looking at the scatterplot we can see that the data has much more variance for more expensive and more northern houses, so our equal variance condition may also be violated. 
+
+I would think that each house's distance to downtown or densely populated areas is probably a confounding variable. Usually, housing in urban areas is priced differently than housing in rural areas, but this fact isn't accounted for in our model. These may be accounted for by other variables in our data, including `Distance.Station` and `Number.Shops`, but neither of these were included in our analysis.   
+  
+Without investigating those variables first, and considering the possibility of violating our regression assumptions, it would be misleading to make any formal conclusions from this regression analysis.
+
+```{r}
+# Command from the sf library
+# Make a spatial version of the data using the Longitide and Latitude columns
+house.spatial <- st_as_sf(house,coords=c("Longitude","Latitude"),crs = 4326)
+
+# make interactive, for static set as "plot"
+tmap_mode("view")
+
+
+# Command from the tmap library
+# and plot
+tm_basemap("Esri.WorldTopoMap") + 
+     qtm(house.spatial, # data
+         symbols.col="House.Price", # which column for the symbols
+         symbols.alpha=0.9, # transparency
+         symbols.size=.2, # how big
+         symbols.palette="Spectral", #colors from https://colorbrewer2.org
+         symbols.style="fisher") # color breaks
+```
+
+
+## Q6  
+
+Looking at the data on a map we can clearly see that the houses to the west of the river have a lower average price than the houses east of the river, and that the houses at what seems to be the heart of the Sindian district (where the roads seem the most dense i.e. where I am assuming "downtown" is) have a higher average price (noted by the mostly yellow and green dots in that area) than any of the houses on either side of the river (noted by the mostly orange dots elsewhere). The first column of the correlation plot shows that the `Distance.Station` variable, the distance from the house to public transit, has the strongest correlation to unit-price than any other variable in the data set. We also see that house unit-price is correlated with `NUmber.Shops` the number of nearby shops. It makes sense for these two variables to be correlated with the house price from what intuition says about house prices in the city, which are closer to public transit and multiple stores. Longitude is also moderately correlated with house price, which goes along with the intuition we gathered from looking at the map because the river is a longitudinal barrier. The Longituded-price correlation may also be due to longitude's strong correlation with `Distance.Station`. It's hard to tell whether `Distance.Station` is confounding `Longituded` or vice versa, or whether both are indicative of some other more important third spatial variable, without more knowledge of how the city is laid out, but from looking at the scatterplot below our correlation plot it is very clear that these two variables are not independent.
+
+```{r}
+corrplot(cor(house),method="number",type="lower")
+```
+
+
+```{r}
+# Create a plot
+p <- house %>%                  
+  ggplot( aes(Distance.Station,House.Price, col= Longitude)) +
+  geom_point() +
+  theme_classic()+
+  scale_color_gradient(low="blue", high="red")
+
+# and actually plot it
+ggplotly(p)
+```
+
+
+## Q7  
+
+We want to formally test whether the average unit house price for houses near at least 7 shops, $P_7$ is significantly greater than the average house price for the houses in general:
+  
+  
+\[ H_0: \mu(P_7) = \mu(P)\\H_A: \mu(P_7) > \mu(P) \]
+  
+  
+With 95% confidence, we can reject the null hypothesis with a p-value of $p\approx0<0.05=\alpha$. The probability of getting a sample of houses near at least 7 stores with a mean unit price of ~46,6437.50 NTD/Ping or higher from a population of general houses whose mean unit price for houses is ~37,9801.90 NTD/Ping is less than $p \approx 0.0000000000004\%$. There is strong evidence to suggest that the houses near at least 7 shops have a higher average unit price than the general houses.
+  
+```{r}
+# Filter for houses close to >=7 shops
+house.gt7shops <- 
+  house %>%
+  filter(Number.Shops>=7)
+
+mean(house.gt7shops$House.Price)
+mean.h.p
+
+t.test(x=house.gt7shops$House.Price, # filtered house prices
+       alternative="greater", # One-tailed test
+       mu=mean.h.p) # Overall mean house price
+```
+
+
+
+
+
+
+
+
+
+

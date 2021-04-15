@@ -1,0 +1,261 @@
+---
+title: "STAT-462: Lab 4"
+author: "Candace Todd"
+date: "March 3, 2021"
+output:
+  prettydoc::html_pretty:
+    theme: cayman
+    highlight: github
+    toc: true
+    prettydoc::toc_float: yes
+    number_sections: yes
+    df_print: paged
+  html_notebook:
+    toc: true
+    toc_float: yes
+    number_sections: yes
+    theme: lumen    
+---
+
+
+```{r eval=FALSE, include=FALSE}
+# Identifying outliers
+
+rm(list=ls())
+
+# Not actually colorign the outlier, just wanted to see what would happen if you colored multiple points
+test <- data.frame(VarA=c(2,5,3:7,2,6,2,10),VarB=c(1,4,3:7,5,2,5,-30))
+plot(test$VarA,test$VarB,pch=16)
+outlier <- test[test$VarB>=5,]
+plot(test$VarA,test$VarB, pch=16)
+lines(outlier$VarA,outlier$VarB,col="red",type="p",pch=16)
+
+# This only works in the console, not a code chunk. Run all of this there
+# plot(test$VarA,test$VarB)
+# identify(test$VarA,test$VarB)
+# use negative indexing to remove outliers
+```
+
+
+# Markdown
+
+```{r, message=FALSE, warning=FALSE}
+# Clear workspace
+rm(list=ls())
+
+# Load libraries
+library(ggplot2)
+library(ggpubr)
+library(Stat2Data)
+library(corrplot)
+library(olsrr)
+library(sf)    
+library(tmap)  
+library(readxl) 
+library(plotly) 
+library(tidyverse)
+library(skimr)
+library(hrbrthemes)
+```
+  
+
+# Public Safety  
+  
+There are 2 columns in this data set.  
+  
+  
+```{r, warning=FALSE}
+spending <- read_excel("expenditure.xlsx")
+print(paste("Number of Columns: ", ncol(spending), sep=""))
+```
+
+## - Q1  
+  
+The purpose of this simulated data set is to examine the relationship between town population and public safety spending for 29 suburban towns in some metropolitan area. The 2 variables in the data set are `TownPop`, the town's population in tens of thousands, and `Expenditure`, per-capita public spending safety (I'm assuming in units of US dollars per person). Each of the 29 rows represents one town's population and per-capita public safety spending. We want to inspect population as a predictor of spending. Assuming these data were randomly selected we can extend our following conclusions to the whole metropolitan area from which the data were gathered (all in theory, since these are simulated data). 
+  
+It is possible that there are money-related confounding variables, such as the income for the town citizens or house prices for the town. Both of these impact the amount of taxes people pay, which is directly related to local public spending budgets. We briefly discussed in class that people with higher incomes have a higher spread in the amount of money they spend on food, perhaps this phenomenon also presents itself with other need-based expenses like public safety. It seems that population density in the town, which is also related to income and house prices since less-wealthy people living in suburban areas live in denser neighborhoods, is also a possible confounding variable.
+  
+The average town population is 351,900 people with a  standard deviation of 129,800 people. The average per-capita public safety expenditure is \$140.78 per person with a standard deviation of \$37.59 per person. We see that both variables are positively skewed, but `Expenditure` has a larger spread and greater skew than `TownPop`.
+
+*(Note: Scales on axes below are different)*
+  
+```{r}
+skim(spending) # Examine vairables
+spending <- arrange(spending, desc(Expenditure)) # Sort by expenditure
+
+# Plot histograms of both variables
+par(mfrow=c(1,2))
+hist(spending$TownPop, col="#2680D0", border="#1A5C96", main=" Town Population", xlab="10s of Thousands", ylim=c(0,15))
+hist(spending$Expenditure, col="#2680D0", border="#1A5C96", main= "Per-Capita Spending", xlab="$/Person", ylim=c(0,25))
+```
+  
+
+  
+From the scatterplot below of `TownPop` vs `Expenditure`, where each point represents one town, we see that the town represented at (76,000  people, \$310/person) has values far outside that of any other town (see blue star-shaped data point). When we plot the data again without this outlier there appears to be a moderate, negative, linear relationship between a town's population and its per-capita spending. In the inclusive plot, the same relationship between population and spending is not apparent.
+
+*(Note: Scales on axes below are different)*
+
+```{r}
+
+outlier <- spending[1,] # Extract the outlier, the one with the highest of both values
+
+# Plotting data with and without outlier side by side
+par(mfrow=c(1,2))
+
+# Plot all data, but initally exclude the outlier
+plot(x=spending[-1,]$TownPop, # outlier is in the first row because we sorted   
+     y=spending[-1,]$Expenditure,
+     cex=1.5,       # point size
+     lwd=2,         # line thickness
+     frame=FALSE,   # remove plot frame 
+     xlim=c(10,80),  # set x axis limits
+     ylim=c(60,350), # set y axis limits
+     xlab="Population (10s of Thousands)",      # x-axis label
+     ylab="Per-Capita  Expenditure ($/Person)", # y-axis label
+     col="azure4",                              # point color
+     main="Inclusive Town Data")                # plot title
+
+# Now plot just outlier
+lines(outlier$TownPop, outlier$Expenditure, col="#2680D0", type="p", pch=8, cex=1.5, lwd=2)
+
+# Plot all data without the outlier at all
+plot(x=spending[-1,]$TownPop, y=spending[-1,]$Expenditure, cex=1.5, lwd=2, frame=FALSE, xlim=c(10,60), ylim=c(60,190), xlab="Population (10s of Thousands)", ylab="Per-Capita  Expenditure ($/Person)", main="Exclusive Town Data", col="#5F9C5D")
+```
+
+## - Q2  
+  
+If the taxpayers' claim that smaller towns spend more on public safety per person is true, we should see a negative slope in our simple linear regression line--- as we would observe higher town populations, we would observe lower per-capita spending $\iff$ we would observe higher per-capita public safety spending in towns with lower populations.  
+  
+
+## - Q3
+  
+Performing a simple linear regression on the inclusive data gives us the equation 
+
+$$\widehat{\text{Per-Capita Spending}}=117.6143 + 0.6584\times( \frac{\text{Population}}{10,000})$$ 
+
+where $\text{Per-Capita Spending}$ is in dollars spent on public safety per person (assumed units) in that town and $\text{Population}$ is the number of people in a town. In our equation we divide population by 10,000 because the population units used for the model were in tens of thousands.  This regression equation has a positive slope, which is the opposite of what the taxpayers claimed would be true. But the p-value for our slope is $p=0.236>0.05=\alpha$ meaning we do not have a statistically significant amount of evidence to suggest that the true slope for the line relating this municipality's towns' populations to their expenditures is non-zero. From this analysis we see that it is possible that there is truly no linear relationship between the two variables.
+  
+However, when we were looking back at our scatterplots from **Q1** we saw that the outlier distorted the apparent relationship between population and spending that seemed to be present when we focused on the rest of the data. Further consideration of the outlier should be done before making any formal conclusions about the slope.
+  
+```{r}
+model1 <- lm(Expenditure~TownPop, spending)
+summary(model1)
+```
+
+## - Q4  
+
+Below we plot the inclusive data and the corresponding regression line with its confidence interval.
+  
+```{r}
+# Plot data with regression line
+ggplot(data=spending, mapping=aes(x=TownPop, y=Expenditure)) +        # Set attributes for whole plot
+  geom_smooth(method=lm, color="#2680D0", fill="grey", formula=y~x) + # Set attributes for linear model layer
+  geom_point(shape=21, stroke=1,fill="#2680D0", size=3, alpha=0.5) +  # Set attributes for scatterplot layer
+  theme_minimal() + # Set plot color scheme
+  xlab("Population (Tens of Thousands)") +              # Set x-axis label
+  ylab("Per-Capita Expenditure (Dollars per Person)") + # Set y-axis label
+  ggtitle("Regression on Inclusive Town Data") +        # Set title
+  theme(plot.title = element_text(hjust = 0.5))         # Center title
+  
+  
+```
+  
+
+## - Q5  
+
+To our eyes, most of the points in the scatterplot above seem to be following a downward trend, but the regression line is sloping upward. It doesn't look like the regression line is fitting the data well, which would mean the regression line is misleading as a "line of best fit". This regression line does not seem to be following the same underlying trend as the majority of the data.
+  
+## - Q6  
+  
+When we remove the outlier, the linear regression yields a negative slope with a low p-value $p\approx 0.000006 < 0.05=\alpha$. Without the outlier there is strong evidence to suggest that our slope is non-zero. Now the "line of best fit" follows the data in a way that is consistent with what our eyes intuitively see as a good fit. Also, since this slope is negative, this regression output gives evidence to support the taxpayers' claim that towns with higher populations have less per-capita expenditures.
+
+```{r}
+# Removing the outlier
+# Our data is sorted, so the outlier will be in the first row
+spending.new <- spending[-1,]
+
+# Get a new linear model from the data that doesn't include the outlier
+model2 <- lm(Expenditure~TownPop, spending.new)
+summary(model2)
+
+# Plot the data without the outlier
+ggplot(data=spending.new, mapping=aes(x=TownPop, y=Expenditure)) +
+  geom_smooth(method=lm, color="#5F9C5D", fill="grey", formula=y~x) +
+  geom_point(shape=21, stroke=1,fill="#5F9C5D", size=3, alpha=0.5) +
+  theme_minimal() +
+  xlab("Population (Tens of Thousands)") +
+  ylab("Per-Capita Expenditure (Dollars per Person)") +
+  ggtitle("Regression on Exclusive Town Data") +
+  theme(plot.title = element_text(hjust = 0.5))
+
+```
+
+
+## - Q7
+
+Th correlation coefficient for the data that excludes the outlier is $r\approx0.7434$
+
+```{r}
+summary(model2)
+r.squared <- summary(model2)$r.squared
+print(paste("Correlation coefficient r: ", sqrt(r.squared)), sep="")
+```
+
+## - Q8  
+  
+The regression equation below comes from our linear model of the data excluding the outlier, where $\text{Per-Capita Expenditure}$ is in dollars spent on public safety per person in that town and $\text{Population}$ is the number of people in the town. Note that the population units used to make the model were in Tens of Thousands of people, which is why our equation divides town population by 10,000.
+  
+$$ \widehat{\text{Per-Capita Expenditure}}=180.3812+ (-1.3531) \times (\frac{\text{Population}}{10,000})$$
+  
+
+ 
+## - Q9
+  
+    
+For every 10,000 person increase in the population of a town in this metropolitan area, the per-capita expenditure of the town decreases by $1.35. 
+  
+
+## - Q10
+
+`Model2`'s MSE is ~$\$158.37/\text{person}$. This value means that, on average, our model is off by about $\pm \sqrt{\$158.37} \approx \$12.585$ per person in its prediction of town per-capita expenditures given a town population. This MSE has specific units from the context of the question we were asking and the data that we used, it wouldn't make sense to compare the MSE between different models of different data because the values would all be in different units, making their comparison meaningless.
+
+
+```{r}
+# MSE = sum of the squared residuals averages with n-2 degrees of freedom  
+mse <- sum( (model2$residuals)^2 )/nrow(spending.new-2)
+print(paste("Model2's Mean Squared Error: ", mse, sep=""))
+```
+
+## - Q11  
+  
+Choosing a significance level of $\alpha=0.05$ we can conduct a t-test for the following hypotheses:  
+
+\[H_0:\beta_1 =1\text{: The true slope of the line predicting per-capita expenditure from town population is \$1 per-capita per 10,000 people}\\H_A:\beta_1\neq 1 \text{: The true slope of the line predicting per-capita expenditure from town population is not \$1 per-capita per 10,00 people}\]
+  
+The probability of getting a sample slope of ~\$-1.35 per-capita per 10,000 people when the true slope of the line relating town population to per-capita safety spending is \$1 per-capita per 10,000 people is ~0 which is less than our significance level of 0.05. With 95% confidence we can reject our null hypothesis, there is strong evidence to suggest that the true slope of the line relating public safety spending to town population is not \$1 per-capita per 10,000 people.
+
+```{r}
+# Reminder of the information we have
+table <- coef(summary(model2))
+table
+
+# Extract our slope statistic from model
+b1 <- table["TownPop","Estimate"]
+
+# Extract our slope's standard error from model
+se <- table["TownPop","Std. Error"]
+
+# t-statistic = (sample slope) - (null slope) / standard error
+t.statistic <-  (b1-1)/se
+
+# Find the probability of getting this t-statistic in a t-distribution with n-2 degrees of freedom
+# Double the result for a 2-sided test
+p.value <- pt(q=t.statistic, df=( nrow(spending.new)-2 ), lower.tail=TRUE)*2
+
+# Display p-value
+print(paste("P-value:", p.value))
+
+# Concluding statement
+print(paste("The probability of getting a sample slope of $", b1,"per-capita per 10,000 people when the true slope of the line relating town population to per-capita safety spending is $1 per-capita per 10,000 people is ", p.value,", which is less than our significance level of 0.05. With 95% confidence we can reject our null hypothesis, there is strong evidence to suggest that the true slope of the line relating public safety spending to town population is not $1 per-capita per 10,000 people.",   sep=""))
+```
+

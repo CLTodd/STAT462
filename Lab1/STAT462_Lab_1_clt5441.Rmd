@@ -1,0 +1,174 @@
+---
+title: "clt5441_lab1"
+author: "Candace Todd"
+date: "2/3/2021"
+output: html_document
+---
+  
+```{r include=FALSE}
+rm(list=ls())
+library("tidyverse") # Lots of data processing commands
+library("knitr")     # Helps make good output files
+library("rmarkdown") # Helps make good output files
+library("lattice")   # Makes nice plots
+library("RColorBrewer") # Makes nice color-scales
+library("ISLR")      # contains a credit dataset
+library("yarrr")     # contains a toy dataset about pirates
+library("skimr")     # Summary statistics
+library("Stat2Data") # Regression specific commands
+library("olsrr")     # Regression specific commands
+library("nortest")   # Regression specific commands
+library("lmtest")    # Regression specific commands
+library("IMTest")    # Regression specific commands 
+library("MASS")      # Regression specific commands
+library("moderndive")# Regression specific commands
+library("corrplot")  # correlation plots
+library("ggpubr")    # Nice regression plots
+library("car")       # this one sometimes has problems, don't panic if you get errors
+library("ggplot2")
+```
+
+  
+The `mtcars` data set contains data on 1973-1974 model automobiles. There are 32 cases and 11 numeric variables. This information is from the 1974 *Motor Trend* Magazine.  
+  
+```{r skim}
+skim(mtcars)
+```
+
+  
+### A  
+  
+The maximum value of the Gross Horsepower of the cars is 335.  
+```{r echo=FALSE}
+skim(mtcars)[4,c(2,11)] # Didn't think this code was necessary to show
+```
+  
+### B   
+   
+The median weight of the cars is 3.325.  
+```{r echo=FALSE}
+skim(mtcars)[6,c(2,9)] # Didn't think this code was necessary to show
+```
+  
+### C  
+  
+In this data set, the Manual cars tend to have higher mileage than the Auto cars. The middle 50% of the Manual's mileage has higher values and more variability than the middle 50% of the Auto's mileage. The Manual's mileage is positively skewed while the Auto's mileage seems approximately symmetric. The Manual's mileage reaches a higher maximum value while the Auto's mileage reaches a lower minimum value.  
+```{r C}
+boxplot(mpg~am,          
+        data=mtcars,                         
+        xlab="Transmission",ylab="mpg", 
+        names=c("Auto","Manual"),            
+        col=c("deepskyblue4","deepskyblue")) 
+```
+  
+###  D  
+  
+```{r D}
+mean(mtcars$mpg)
+sd(mtcars$mpg)
+```
+The average mileage of the 1973-74 car models is found to be about 20.091 miles per gallon. The standard deviation of the mileage of the 1973-74 car models is found to be about 6.027 miles per gallon.  
+  
+  
+### E  
+  
+A normal QQ-plot is a plot showing how well your data follows a normal distribution by plotting the empirical values at each quantile against the theoretical distribution's values at those same quantiles. A diagonal line is drawn to show what pattern the QQ-plot points would follow if the empirical data followed the theoretical distribution perfectly. A plot whose data points follow the diagonal line well is a plot of data that very closely follows the normal distribution.  
+  
+To make a normal QQ-plot, make each of the $n$ data points its own quantile. Then find the same $n$ quantiles in a theoretical normal distribution so that the distribution is split into $n+1$ segments of equal area. Plot one quantile at a time to get each point on the QQ plot, where the value along the $y$-axis corresponds to that quantile's value in the data and the value along the $x$-axis corresponds to the same quantile's value in the normal distribution.  
+  
+### F  
+  
+The histogram appears to be slightly positively skewed. From the QQ-plot we can see that the middle of the data, about +/-1 standard deviation from the mean, follows a normal distribution pretty well, but the tails of the data do not. With a p-value of 0.1229 > 0.05 we cannot reject the null hypothesis that the `mpg` data is normally distributed. I would cautiously say the mileage data is roughly normal.
+
+```{r F}
+# histogram
+hist(mtcars$mpg,br=10)
+
+# QQ plot
+ggqqplot(mtcars$mpg,col="red")
+
+# Shapiro Wilks test
+shapiro.test(mtcars$mpg)
+```
+  
+### G  
+  
+When X~N(5,2), approximately 23.98% of values fall at or below 4. In the same distribution, 2.5% of values fall at or below (approximately) 2.23.
+
+```{r G}
+# When X~N(5,2), P(X<=4) =
+pnorm(q=4,mean=5,sd=sqrt(2))
+
+# When X~N(5,2) and P(X<=a)=0.025, a=
+qnorm(p=0.025,mean=5,sd=sqrt(2))
+```
+  
+### H  
+  
+If the average elapse time is 39 days with a standard deviation of 6 days, there is a 99.617% chance that your travel expenses would be reimbursed after 55 days had elapsed. If it has been 55 days, I would conclude that the admin office is processing my claim extremely and unusually slowly.   
+```{r H}
+# When X~(39,36), P(X<=55) =
+pnorm(55,39,6)
+```
+  
+### I  
+  
+I didn't know you could show histograms in the console, like how the `skim()` function puts histograms in the last column of the data summary. I tried looking up how this works and, from what I understand, all you need to do is escape the unicode character from the string. I also read that `skimr` can render inline line charts, but didn't see an example. This seems extremely useful for any time you'd want to display symbols on miniature graphics somewhere. "It's especially useful that they're basically just characters and can be stored in a data frame. Then I discovered you can display at least some of these characters in plot labels, which might be useful for some math notation purposes. Now that I know this exists, I wonder if there's any way I can use it. I also read in the `skim()` documentation that there are known issues with the way the unicode characters print for some people, so maybe I need to learn more about that before I try to use it.   
+```{r I}
+# sadly, this isn't printing properly in the HTML I see.
+# I saw a github thread about replacing unicode characters with "entities" when using HTML, 
+# but I'm not sure what that means/how to do it yet.
+# It does print properly in the console, though
+print("\u{24C9}\u{24BD}\u{24BE}\u{24C8} \u{24BE}\u{24C8} \u{24B8}\u{24C4}\u{24C4}\u{24C1} \u{2603}")
+```
+  
+### J  
+  
+```{r}
+knitr::include_graphics("clt5441_Lab1_Fig1.png")
+```
+  
+### K    
+  
+```{r eval=FALSE, include=FALSE}
+# This was me playing around, keeping it for personal reference later
+mtcars$am <- as.character(mtcars$am)
+C_plot <- ggplot(mtcars, aes(y=mpg, group=(am), fill=am)) + # set attributes
+  stat_boxplot(geom ="errorbar") + # add the whiskers
+  geom_boxplot() +# add the box  
+  scale_fill_manual(labels=c("Auto","Maunual"), # legend key
+                    values=c("deepskyblue4","deepskyblue")) + # color
+  theme(legend.position="bottom") + # set legend position
+  xlab("Transmission") + # x-axis label
+  ylab("Mileage (mpg)") + # y-axis label
+  labs(fill="")   # Making the redundant legend title empty
+```
+
+```{r}
+library("ggplot2")
+mpg_plot <-
+  ggplot(mtcars, aes(x=mpg)) +
+  geom_histogram(binwidth=1.95) # This binsize got me the closest to how the other plot looked
+
+mpg_plot
+```
+
+
+
+
+
+
+
+  
+
+
+
+
+
+
+
+
+
+
+
+
