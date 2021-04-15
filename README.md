@@ -3,7 +3,7 @@ The Pennsylvania State University
 Remote Synchronous  
 Spring 2021
   
-These is a collection of the weekly/bi-weekly labs I completed for my STAT462 class during my sohphomore year at Penn State. For each lab (except Lab 8) the data and the and a set of analysis questions were given to us. I did not record the lab questions, the files in this repository are just my answers. All of the work was done entirely on my own, none of the labs involved group work. All of the report files are named clt5441_labX per course requirement, after my school email <clt5441@psu>.  
+These is a collection of the weekly/bi-weekly labs I completed for my STAT462 class during my sohphomore year at Penn State. For each lab (except Lab 8) the data and the and a set of analysis questions were given to us. I did not record the lab questions, the files in this repository are just my answers. All of the work was done entirely on my own, none of the labs involved group work. All of the report files are named clt5441_labX per course requirement, after my school email <clt5441@psu.edu>.  
 
 You may notice each lab is formatted differently, that was mostly me having fun using different RMarkdown templates. I'm still learning the ins and outs, excuse my occasionally poorly formatted YAML headings.  
 
@@ -19,5 +19,5 @@ This may be updated with more details in the future.
 
 [Candace Todd](https://www.linkedin.com/in/candace-todd/)  
   
-<CLTodd@psu.edu> or <clt5441@psu>  
+<CLTodd@psu.edu> or <clt5441@psu.edu>  
 (same inbox)
