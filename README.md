@@ -1,9 +1,8 @@
 # STAT462: Applied Regression Analysis
-The Pennsylvania State University  
-Remote Synchronous  
-Spring 2021
+**The Pennsylvania State University**  
+Spring 2021 | Remote Syncrhonous  
   
-These is a collection of the weekly/bi-weekly labs I completed for my STAT462 class during my sohphomore year at Penn State. For each lab (except Lab 8) the data and the and a set of analysis questions were given to us. I did not record the lab questions, the files in this repository are just my answers. All of the work was done entirely on my own, none of the labs involved group work. All of the report files are named clt5441_labX per course requirement, after my school email <clt5441@psu.edu>.  
+These is a collection of the weekly/bi-weekly labs I completed for my STAT462 class during my sohphomore year at Penn State. For each lab (except Lab 8) the data and the and a set of analysis questions were given to us. I did not record the lab questions, the files in this repository are just my answers. All of the work was done entirely on my own, none of the labs involved group work. Higher-numbered labs represent later, more advanced work. All of the report files are named clt5441_labX per course requirement, after my school email <clt5441@psu.edu>. Our labs were done entirely within an RMarkdown file and knitted to an HTML, per course requirement. 
 
 You may notice each lab is formatted differently, that was mostly me having fun using different RMarkdown templates. I'm still learning the ins and outs, excuse my occasionally poorly formatted YAML headers.  
 
