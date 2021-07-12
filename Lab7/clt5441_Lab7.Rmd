@@ -1,0 +1,447 @@
+---
+title: "STAT-462: Lab 7"
+author: "Candace Todd"
+date: "April 14, 2021"
+output:
+  rmdformats::downcute:
+    self_contained: true
+    gallery: false
+    highlight: pygments
+---
+  
+# Markdown
+  
+
+  
+```{r, message=FALSE, warning=FALSE}
+# Clear Workspace
+rm(list = ls())
+
+# Load Libraries
+library(ggplot2)
+library(skimr)
+library(GGally)
+library(rcompanion)
+library(corrplot)
+library(olsrr)
+library(plotly)
+```
+  
+    
+  
+# Q1: EDA
+
+## Context
+  
+```{r}
+# Read in Data
+movies <- read.csv("HollywoodMovies2011.csv")
+```
+  
+The data contained in *HollywoodMovies2011.csv*, which we have read in as the `movies` data set, contains information on movies from our studio in 2011. In this data set are 7 variables, listed and described below, and 119 rows, with each row representing one movie (except one row, we'll discuss later). We would like to use our data to better understand what factors affect a film's Rotten Tomatoes score. It is unclear who collected the data, when this data was collected (other than post-2011), or where it was collected from (other than the critical reviews, which have their source listed).   
+  
+There is 1 categorical variable and 6 numeric variables.
+  
+| Variable Name       | Description                                                                                                        | Units                       |
+|---------------------|--------------------------------------------------------------------------------------------------------------------|-----------------------------|
+| `Name`              | The title/name of the movie                                                                                        |                             |
+| `RottenTomatoes`    | Percentage total rating from critical reviews, from the [Rotten Tomatoes website](https://www.rottentomatoes.com/) | Unitless Percent, 0-100     |
+| `AudienceScore`     | Percentage audience rating from opening weekend surveys, source unknown                                            | Unitless Percent, 0-100     |
+| `TheatersOpenWeek`  | Number of cinemas showing the movie on opening weekend                                                             | Count                       |
+| `BOAverageOpenWeek` | Average box office revenue per theater opening week-end                                                            | US dollars (\$)             |
+| `DomesticGross`     | Gross revenue in the US by the end of 2011                                                                         | Millions of US Dollars (\$) |
+| `Profitability`     | Percent of the budget recovered in profits                                                                         | Unitless Percent, 0-100     |
+  
+It is unclear whether this is data on every movie that the studio produced in 2011 or just a random sample of movies that the studio produced in 2011. We will assume that `movies` is a representative sample of 2011 movies from this studio, however if this is not true any conclusions we make from this sample will not be generalizable to all 2011 movies by this studio. And since our data is all from 2011, we should be wary of extending our conclusions to films from this studio released outside of 2011. 
+  
+Note that it is currently 2021 and this data is from 2011. A lot of important factors can change about a studio in a decade, from company culture to the creative staff to contemporary attitudes about the film studio. It is likely that these factors have some impact on a film's ratings. Decade old data may give us outdated information. This is especially troublesome if the goal of this analysis is to predict Rotten Tomatoes scores for future films from this studio. Ideally we would use more recent data so we can be more accurate in our predictions. With this in mind, we continue with the data we have.
+  
+Genre, movie rating (G, PG, PG-13, etc.), medium (live action, CGI, etc), production time, and other variables that affect audience expectations and movie perceptions may influence critic scores. These could be confounding variables, but perhaps their effect on movie quality is accounted for in the variables we have. I don't have reason to believe the potential for confounding  variables is of great concern here. 
+  
+One lurking variable that may be concerning is the release date of the film. I imagine films released closer toward the end of the year would inherently have lower `DomesticGross` values, since that variable measures specifically the amount of revenue earned by the end of the year. However, we don't have this information so we keep this in mind and move on.
+  
+Finally, there is potential for the rows to be dependent. A movie that gets very good (or very bad) ratings may influence critic expectations and perception of movies the studio releases from that point on. In fact, studios often advertise their newer movies as "brought to you by the same studio that gave you \<Insert Critically Acclaimed Film\>". If we had data on the dates that these movies were released we may be able to take this dependence into account with a specialized model. For now, we continue the analysis without this information keeping the possibility for dependence in mind.  
+  
+In summary, we are slightly concerned about the impact of release date on `DomesticGross`, we acknowledge the possibility for serial correlation between movies, and we are assuming our data is a representative sample of all 2011 films from this studio.  
+  
+## Exploring the Data
+  
+Here we examine the data.  
+  
+First, note that there is a case in this data set with a negative value for `RottenTomatoes`, `BOAverageOpenWeek`, and `Profitability` named "Test Test". The extremely unlikely combination of the values for "Test Test" and the fact that it is named "Test Test" (which, besides being a suspicious name, yields no fruitful Google results) leads me to believe this is a test entry, and not a real movie. I feel comfortable with removing this row from the data set at this point, as it does not contain information about a member of our population of interest. We remove it now because its presence distorts the distributions and summaries of the other data in `movies`.
+  
+```{r}
+# Likely a test entry, not a real movie
+# Hard to believe a movie with a domestic gross revenue of $10 billion yields no results from a quick Google search
+movies[movies$RottenTomatoes<0,]
+
+# Keep everything except the test row
+movies <- movies[-80,]
+
+# Reset the row indexing so we don't have issues later
+row.names(movies) <- NULL
+```
+
+
+
+```{r}
+skim(movies)
+```
+  
+
+Below is a scatterplot of every variable in `movies` ploted against each other, the univariate distribution of each variable along the diagonal, and the pairwise Pearson correlation for all variables. 
+  
+
+```{r, message=FALSE, warning=FALSE}
+matrix <- ggpairs(movies[,-1], ggplot2::aes(alpha=0.9), diag=list(continuous="bar"))
+matrix
+```
+  
+See `skim` summary table for values quoted below.
+  
+  * `Name`: Categorical variable with 118 unique values, as we expected since each movie in the data set should be unique
+  
+  * `RottenTomatoes`: Slightly negatively skewed and bi-modal with peaks around 30% and 80%; perhaps there are 2 sub-populations of "bad" movies and "good" movies. The movies in this data have a mean critical score of 52.2%, a median critical score of 48%, and standard deviation of 26.6% .
+    
+  * `AudienceScore`: Roughly bell shaped distribution with mean score of 61.3%, a median score of 59%, and a standard deviation of 16.9%. There is a strong, positive, linear relationship with critical Rotten Tomatoes scores.
+  
+  * `TheatersOpenWeek`: Negatively skewed (potentially bi-modal) distribution with a mean of 2841 cinemas, a median of 5686 cinemas, and a standard deviation of 930 cinemas.  There is no clear relationship with critical Rotten Tomatoes scores.
+  
+    + The smaller peak is at less than 1,000 cinemas while the larger peak is around 3,000 cinemas. Perhaps there is a particular sub-population of movies which are only released to a select few theaters on opening weekend. It seems likely that the exclusivity of a movie is an indicator of its quality, which may impact the critical ratings.
+  
+  * `BOAverageOpenWeek`: Heavily positively skewed distribution with a mean of \$8,364 , median of \$5,686 , and a standard deviation of \$10,367. There may be a positive relationship with critical Rotten Tomatoes scores, but it is unclear at this point.
+  
+    + The movie titled "The Girl With The Dragon Tattoo" seems to be an outlier, it had a an average box office revenue per theater of \$93,230 on its opening week-end whereas the rest of the movies had an average box office revenue of less than \$42,000
+  
+  * `DomesticGross`: Positively skewed with a mean of \$71.1 million, a median of \$43.2 million, and a standard deviation of \$70.3 million. There may be a positive relationship with critical Rotten Tomatoes scores, but it is unclear at this point.
+  
+  * `Profitability`: Heavily positively skewed with a mean of 3.61%, a median of 2.33%, and a standard deviation of 6.97%. There is no clear relationship with critical Rotten Tomatoes scores.
+  
+    + Most movies (all but 2) recovered  at most 20% of their respective budgets in profits, but two movies are causing a heavy skew. "Rio" recovered ~65% of its budget in profits and "The Adjustment Bureau" recovered ~40% of its budget in profits.
+
+
+```{r}
+# A look at the movies we mentioned above
+movies[movies$Name %in% c("The Girl With The Dragon Tattoo","Rio","The Adjustment Bureau"),]
+```
+  
+# Q2: Correlation Plot
+  
+Below is a correlation matrix where the tiles along the bottom row indicate each variable's correlation with `RottenTomatoes`.  
+  
+
+  
+```{r}
+cormatrix <- ggcorr(movies[,-1], layout.exp=1, high="blue", low="red")
+cormatrix
+```
+  
+`RottenTomatoes` is highly positively correlated with `AudienceScore`, we could see this strong positive linear relationship in the scatterplot matrix. The Pearson correlation between `RottenTomatoes` and `BOAverageOpenWeek`, `DomesticGross`, and `Profitability` respectively indicates a slightly positively correlation, although the corresponding scatterplots (from our EDA) seem to have random and not necessarily linear patterns. `RottenTomatoes` has almost no linear correlation with `TheatersOpenWeek`.  
+  
+Since `RottenTomatoes` has the strongest correlation with `AudienceScore` I think `AudienceScore` will have the strongest impact on a movie's critical Rotten Tomatoes score.
+  
+# Q3: Multiple Linear Regression
+    
+First we fit a full first order regression model to the data, with all of our numeric variables  as predictors of critical Rotten Tomatoes scores.
+
+```{r}
+# Model all of the variables (except `Name`) as predictors of critical rating
+mlm.full <- lm(RottenTomatoes~., data=movies[,-1])
+summary(mlm.full)
+
+```
+
+```{r, eval=TRUE,echo=FALSE}
+c1 <- mlm.full$coefficients
+```
+
+  
+The equation given by our model is 
+  
+$\\ \widehat{Critical}=-36.350+ (1.363 \times Audience) + ( 0.0025 \times Theaters) + (0.0003 \times BO) + (-0.08334 \times Domestic) + (0.3496 \times Profit)\\$
+  
+With the variables defined below.  
+  
+  * $\widehat{Critical}$: Predicted percentage (as a whole number) critical Rotten Tomatoes rating of a 2011 movie from this studio. Our intercept is not interpretable in this context; when all other predictors are 0, we would expect the average critical review to be about `r round( c1[["(Intercept)"]], 3 )`%.
+  
+  * $Audience$: The percentage (as a whole number) audience rating from opening weekend surveys of a 2011 movie from this studio. Holding all other predictors constant, we expect the predicted critical rating to increase by about `r round( c1[["AudienceScore"]],3 )`% for every 1% increase in audience rating. Controlling for the other predictors, we have strong evidence that `AudienceScore` truly has a linear relationship with `RottenTomatoes`.
+  
+  * $Theaters$: The number of cinemas showing a 2011 movie from this studio on opening weekend. Holding all other predictors constant, we expect the predicted critical rating to increase by about `r round( c1[["TheatersOpenWeek"]],3 )`% for every additional cinema that shows a movie on its opening weekend. Controlling for the other predictors, we do not have evidence that `TheatersOpenWeek` truly has a linear relationship with `RottenTomatoes`.   
+    
+  * $BO$: The average opening weekend box office revenue of theaters showing a 2011 movie from this studio, in US dollars. Holding all other predictors constant, we expect the predicted critical rating to increase by about 0.0003% for every additional \$1 in average box office revenue on a movie's opening weekend. Controlling for the other predictors, we have weak evidence that `BOAverageOpenWeek` truly has a linear relationship with `RottenTomatoes`.
+  
+  * $Domestic$: The gross revenue of a 2011 movie from this studio in the US by the end of 2011, in millions of dollars. Holding all other predictors constant, we expect the predicted critical rating to decrease by about `r abs(round( c1[["DomesticGross"]],3 ))`% for every additional \$1 million in year-end gross domestic revenue. Controlling for the other predictors, we have evidence that `DomesticGross` truly has a linear relationship with `RottenTomatoes`.
+  
+  * $Profit$: The percent (as a whole number) of a 2011 studio film's budget recovered in the film's profits. Holding all other predictors constant, we expect the predicted critical rating to increase by about `r round( c1[["Profitability"]],3 )`% for every additional 1\% a film's budget recovered in profits. Controlling for the other predictors, we have weak evidence that `Profitability` truly has a linear relationship with `RottenTomatoes`.
+
+With this model, 70.49% of the variation in critical Rotten Tomatoes ratings of 2011 movies from this studio is accounted for by variation in our predictors.
+  
+# Q4: Model Assumptions  
+  
+We earlier discussed the potential for serial correlation between the movies, in terms of their release date. We do not have release date data, so we cannot assess whether serial correlation is present in this data. Without evidence to suggest otherwise, we'll conclude that the independence condition is not satisfied. This is concerning, as the hypothesis tests for our model parameters and all intervals are sensitive to this condition being broken.  
+  
+We continue with the assessment of the other model assumptions.  
+  
+
+```{r}
+# Residuals vs Fits data
+rvf.full <- ols_plot_resid_fit(mlm.full, print_plot = FALSE)
+rvf.full.data <- rvf.full$data
+
+# Histogram of Residuals
+hist <- 
+  ggplot(rvf.full.data, aes(x=resid)) + 
+  geom_histogram(aes(y=..density..), color="grey",fill="white", bins=30) +
+  geom_density(alpha=0.1, fill="blue",color="blue",lwd=1) +
+  xlab("Residuals") + ggtitle("Distribution of Residuals")
+
+# QQ Plot of residuals
+ols_plot_resid_qq(mlm.full)
+
+# Display Histogram
+hist
+```
+
+We see a roughly linear pattern in the Normal Probability plot but it does not follow the line well. There is too much data in the lower tail and not enough in the upper tail. The distribution of the residuals is negatively skewed. We can see this in the density plot as well.  
+  
+The majority consensus for multiple tests all with the null hypothesis for normally distributed residuals is to reject the null hypothesis at 5% significance. We do not have evidence to suggest that the data is normally distributed. However, we see a roughly that the residuals are roughly unimodal and symmetric and only slightly skewed. Here, the deviation from normality in and of itself is not significant enough to warrant discarding the entire model, but it is something to keep in mind if we intend to use the model for predictions (although, our prediction intervals are already sensitive to the independence violation).
+
+```{r}
+# Statistical Tests for normality of the residuals
+ols_test_normality(mlm.full)
+```
+  
+Below is the same scatterplot matrix from our EDA. 
+  
+The only predictor with a clearly linear relationship with `RottenTomatoes` is `AudienceScore`, the linear pattern is present in the scatterplot and the linear correlation between the two is high and statistically significant. All other predictors have an unclear relationship with `RottenTomatoes`. Their respective scatterplots appear random. There is no evidence of a linear correlation between `TheatersOpenWeek` and `RottenTomatoes`. There is evidence of a moderate linear relationship between `RottenTomatoes` and `BOAverageOpenWeek`  and `RottenTomatoes` and `DomesticGross`, but neither correlation is strong.
+  
+```{r, message=FALSE,warning=FALSE}
+# Display scatterplot matrix from earlier
+matrix
+```
+  
+There is no apparent systematic deviation from randomness in the Residuals vs Fits plot, the linearity condition is satisfied.  
+  
+```{r}
+# Display Residials vs Fits plot
+rvf.full
+
+```
+  
+We also see no funneling or fanning in the Residuals vs Fits plot, which suggests homoscedasticity. I'm not comfortable running an F Test, Bartlett Test,  Breusch Pagan Test, or Score Test for homoscedasticity. These tests either require I.I.D. residuals or are sensitive to deviations from normality. I'm not confident that our errors are independent (recall earlier discussion of the possibility of serial correlation) and we saw that our residuals are not normally distributed. From the Residuals vs Fits plot alone, we'll conclude that the equal variance condition is met.  
+  
+Below is a table of the variance inflation factors for all of the variables in the model. None of them have a VIF greater than 10, so there are no serious issues with multicolinearity present in the data.
+  
+```{r}
+# Display VIF table
+ols_vif_tol(mlm.full)
+```
+
+  
+In summary, we have met the conditions for Linearity and Equal Variance, but not the Independence or Normality conditions. We do not have evidence of Multicolinearity.  
+  
+# Q5: Unusual Points
+  
+  
+Below is a plot of each observational unit's studentized residual versus its leverage. Recall that our observational unit is a 2011 movie from this studio, so each point represents the residual and leverage of a particular movie in the data set. From the plot we see the movie in row 90 is immediately identified as a high-leverage outlier, or an influential point. It also appears that the movies in rows 102, 36, and 31 are close to the thresholds for being high-leverage outliers. We'll keep an eye out for these points.
+  
+  
+  
+```{r}
+full.resid.lev <- ols_plot_resid_lev(mlm.full)
+```
+
+Below is a plot of the standardized residuals of each point. None of the points that were flagged as high leverage (red points in the plot above) are outliers. 
+
+```{r}
+full.stand.resid <- ols_plot_resid_stand(mlm.full)
+```
+  
+```{r, include=FALSE, eval=FALSE, echo=FALSE}
+
+# Calculate leverage of each each observatione
+full.lev <- ols_leverage(mlm.full)
+
+# Calculate the cutoff value of leverage
+n=nrow(movies)
+k=length(coefficients(mlm.full))
+conservative_cutoff=2* (k/n)
+cutoff=3* (k/n)
+cutoff
+
+# Add leverage values to data
+movies$full.lev <- full.lev
+high.levs <- movies[ movies$full.lev>=conservative_cutoff,]
+
+# Plot leverages
+plot(x=row.names(high.levs),
+     y=high.levs$full.lev,
+     pch=16,
+     ylim=c(0,0.9),
+     xlab="X",
+     ylab="Leverage",
+     type="h",                # line type
+     lwd=2,                   # line thickness
+     main="Dataset leverage") 
+
+# Add cutoff to plots
+abline(h=cutoff, col="red", lty=2, lwd=2)
+text(x=row.names(high.levs),y=high.levs$full.lev+0.05, labels=rownames(high.levs),data=high.levs, cex=0.9, font=2)
+```
+  
+  
+Below is a plot of the Cook's Distance, a measure of a point's influence on the model fit, for each movie in our data. Here the most influential points are rows 68 and 92. We saw earlier that both were high leverage points, but neither were considered outliers based on the studentized and the standardized residuals. 90, which was initially identified as a high influence outlier, has a higher Cook's distance than many, but not drastically so. 102 was already identified as an outlier; it also has a higher cook's distance than many of the points and was close to the high-leverage threshold in the initial plot.
+  
+```{r}
+full.cooks <- ols_plot_cooksd_bar(mlm.full)
+```
+  
+  
+90 and 102, the movies titled "The Dilemma" and "The Thing" respectively, are moderately influential points. These movies both have large studentized and standardized residuals and moderately large leverages, but their Cook's Distances are not that high which implies the influence they have on the overall model fit is not that large.  
+  
+68 and 92, the movies titled "Rio" and "The Girl With The Dragon Tattoo" respectively, had much larger Cook's Distances than the rest of the movies, but neither were outliers. They did not have remarkable Studentized or Standardized residuals.
+  
+31 and 36, the movies titled "Friends With Benefits" and "Hanna" respectively, had slightly larger Cook's Distances than many of the movies, but neither were outliers. They did not have remarkable Studentized or Standardized residuals.
+
+```{r, message=FALSE, warning=FALSE}
+# Add the residual, leverage, and influence data to the movies data
+movies$full.resid <- rvf.full.data$resid
+movies$full.stud.resid <- full.resid.lev$data$rstudent
+movies$full.stand.resid <- full.stand.resid$data$sdres
+movies$full.lev <- full.resid.lev$data$leverage
+movies$full.cooks <- full.cooks$data$cd
+movies$full.fits <- rvf.full.data$predicted
+
+# Subset of the unusual movies
+unusual.movies <- movies[c(90,102,68,92,31,36),]
+
+# Highlighting points with large residuals on the Residuals vs Fits plot
+unusual <- 
+  ggplot( ) +
+  geom_hline(yintercept=0, lty=2, size=1) +         # Plot y=0 line
+  geom_point(data=movies[-c(90,102,68,92,31,36),],  # Plot non-special movies in blue
+             mapping=aes(x=full.fits, y=full.resid), 
+             color="blue") +
+  geom_point(data=unusual.movies,                   # Plot Special movies in green
+             aes(x=full.fits, y=full.resid), 
+             color="green") +
+  geom_text(label=row.names(unusual.movies),        # Label Special Movies
+            data=unusual.movies, 
+            mapping=aes(x=full.fits, y=full.resid)) +
+  
+  xlab("Fits")+
+  ylab("Residuals") +
+  ggtitle("Residuals vs Fits (full model)")
+```
+  
+  
+```{r}
+ggplotly(unusual) # Display plot 
+```
+  
+Notice none of the flagged points appear in the corners of the Residuals vs Fits plot, which is usually where highly influential points reside.
+  
+```{r}
+unusual.movies    # Display the unusual movie data
+```
+I don't think there are any highly influential points here. The most unusual points are not *highly* unusual. 
+
+# Q6: Assesing Overall Fit  
+
+Here we conduct an F-test for the overall fit of the model.
+  
+$H_0: \beta_{Audience} = \beta_{Theaters}= \beta_{BO} = \beta_{Domestic} = \beta_{Profit} = 0$  
+None of the predictors in our model truly have a linear relationship with critical movie ratings on 2011 movies from this studio.  
+  
+$H_A: \beta_{Audience} \neq 0$ and/or $\beta_{Theaters} \neq 0$ and/or $\beta_{BO} \neq 0$ and/or  $\beta_{Domestic} \neq$ and/or $\beta_{Profit} \neq 0$  
+At least one of the predictors in our model truly has a linear relationship with the critical movie ratings on 2011 movies from this studio.  
+  
+|            | Degrees of Freedom      | Sum of Squares        | Mean Squares        | F                |
+|------------|-------------------------|-----------------------|---------------------|------------------|
+| Regression | $k$ = 5                 | $SSReg$ = 58137.811   | $MSReg$ = 11627.562 | $F^{*}$ = 53.494 |
+| Error      | $n-k-1$ = 118-5-1 = 112 | $SSError$ = 24344.706 | $MSError$ = 217.363 |                  |
+| Total      | $n-1$ = 118-1 = 117     | $SSTotal$ = 82482.517 |                     |                  |
+  
+$F^{*}= \frac{11627.562}{217.363} = 53.494\\$  
+  
+$P(F \geq F^{*})=2.2 \times 10 ^ {-16} \approx 0$  
+  
+Since the p-value $\approx 0 <$ 0.05 = $\alpha$ , we reject the null hypothesis. We have strong evidence to suggest that at least one of the predictors in our model is linearly related to the critical rotten tomatoes ratings for 2011 movies produced by this studio. Our model explains more variance than the null model.  
+  
+# Q7: Partial Slopes 
+  
+```{r}
+summary(mlm.full)
+```
+  
+I would like to remove `TheatersOpenWeek` from the model. At 10% significance there is no evidence to suggest that it has a linear relationship with `RottenTomatoes` in the presence of all of the other predictors. This meets my expectations from what we saw in the correlation matrix, there is almost no linear correlation between `TheatersOpenWeek` and `AudienceScore`.
+  
+```{r}
+cormatrix
+```
+    
+
+# Q8: Re-fitting the model  
+ 
+Here we fit a new model without `TheatersOpenWeek` as a predictor of `RottenTomatoes`.
+  
+```{r}
+# Don't want to use the Name column or any of the columns we added during the outlier diagnostics
+mlm.NoThea <- lm(RottenTomatoes ~ . -TheatersOpenWeek, movies[,2:7])
+ols_regress(mlm.NoThea)
+```
+  
+The equation given by this model is  
+
+$\\ \widehat{Critical}= -28.66+ (1.331 \times Audience) + (0.0002397 \times BO) + (-0.05549 \times Domestic) + (0.3411 \times Profit)\\$
+  
+Where the variables have the same meaning as the first model equation.
+  
+# Q9: Comparing the Models  
+  
+Here we compare the full model with the reduced model using AIC and Adjusted R-squared. The first row represents the full model, `mlm.full`. The Second row represents the model excluding `TheatersOpenWeek`, `mlm.NoThea`.
+    
+```{r}
+compareLM(mlm.full, mlm.NoThea)$Fit.criteria[c(3:5,7,6)]
+```
+
+`mlm.NoThea` has a lower AIC, AICc, and BIC. This suggests that the `mlm.NoThea` model is the best  fit of the data between the two models. The Adjusted R-squared for `mlm.NoThea` is *slightly* lower than the the Adjusted R-squared for `mlm.Full`, but we will still favor `mlm.NoThea` as the better model based on the other measures and the fact that it is a less complex model. 
+  
+The $R^2$ of `mlm.NoThea` is guaranteed to be $\leq$  the $R^2$ for `mlm.Full` because `mlm.Full` has an additional predictor. When you add more predictors to a model you can only explain just as much or more variation in your response than the simpler model. So looking at $R^2$ here, when the only difference between our models is the inclusion of one predictor, is not insightful. Adjusted R-squared penalizes for model complexity and will only increase if including a new predictor accounts for more variation than you would by chance. 
+
+  
+# Q10: Confidence Interval
+
+```{r}
+# Create new movie as a new data frame
+newmovie <- data.frame(Name              ="Hunt of the Killer Cactus",
+                       AudienceScore     = 59,
+                       TheatersOpenWeek  = 5,
+                       BOAverageOpenWeek = 147262,
+                       DomesticGross     = 16.38,
+                       Profitability     = 88.31)
+
+# 95% confidence interval for the average critic rating on a 2011 movie from this studio
+CI <- predict(mlm.NoThea, newdata = newmovie, interval="confidence", level=0.95)
+CI
+```
+  
+Using the reduced model `mlm.NoThea`, we are 95% confident that the average critic Rotten Tomatoes rating for new 2011 movies from this studio with the same set of values for `AudienceScore`, `BOAverage`, `DomesticGross`, and `Profitability` as this movie would be between `r round(CI[2],2)`% and 100%. Our interval extends further upward, but we truncate it at 100 for realism. Keep in mind that we aren't sure whether our data has serial dependence which would affect any intervals we make with our models. Also, recall that our data is a decade old. If this is a new movie it is not a member of our population, which is strictly movies from 2011. We probably shouldn't use our model to predict its critical rating.
+  
+  
+# Q11: The Best Model
+  
+Given a full model with all predictors, Best Subset model selection will find the "best" model for each possible number of predictors. Below is a table displaying the "best" models with 1 predictor, 2 predictors, and so on. 
+
+  
+```{r}
+ols_step_best_subset(mlm.full)
+```
+
+AIC is lowest for the model with 4 predictors, which suggests it is the best fit to the data among these models. Adjusted R-squared is highest for the models with 3 and 4 predictors, where model 4 has a slightly lower Adjusted r-squared. The Final Prediction Error for the model with 4 predictors is the lowest, again suggesting that this model is the most accurate among these models. Based on this, I would conclude that the model with 4 predictors, `RottenTomatoes ~ AudienceScore + BOAverageOpenWeek + DomesticGross + Profitability`, is the best model out of these models. This also happens to be the same model we made earlier, `mlm.NoThea`.
+
+
+
+
+
+
