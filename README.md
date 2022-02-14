@@ -9,7 +9,7 @@ You may notice each lab is formatted differently, that was mostly me having fun 
 <!--  Lab 8 involved picking your own data and conducting whatever type of analysis you wanted. I chose to analyze the effect of different demographic features on the average SAT scores of New York City high schools. I found the data I used with the [NYC Open Data search engine](https://opendata.cityofnewyork.us/). Details to come. Edit: The end of the semester was more hectic than I thought and I ended up opting out of lab 8 and enjoying a restful summer after a year of burnout.
  -->
  
-This repository was not used to maintain workflow for the majority of my labs, I just uploaded my work here toward the end of the semester. You may notice commit messages that mention a Lab 8. I ended up opting out of Lab 8 and enjoying a restful summer after feeling a bit burned out.<!--I did use this for work flow for Lab 8.  -->
+This repository was not used to maintain workflow for the majority of my labs, I just uploaded my work here toward the end of the semester. You may notice commit messages that mention a Lab 8. I ended up opting out of Lab 8 and enjoying a restful summer after feeling a bit burned out, this coincided with the tail end of my prolonged recovery from COVID-19.<!--I did use this for work flow for Lab 8.  -->
   
 One of the labs has a picture of my cat. We just needed to prove we knew how to embed pictures into our lab reports, that photo can be otherwise ignored. That's the context if you find it. 
   
